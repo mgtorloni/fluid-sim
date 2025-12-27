@@ -79,8 +79,17 @@ impl Particles {
         self.collide();
     }
     fn draw(&self) {
+        let max_speed: f32 = 100.0;
+
         for i in 0..self.pos.len() {
-            draw_circle(self.pos[i].x, self.pos[i].y, RADIUS, WHITE);
+            let ratio: f32 = (self.vel[i].length() / max_speed).min(1.0);
+            let colour = Color::new(
+                (ratio * 2.0).min(1.0),
+                1.0 - (ratio - 0.5).abs() * 2.0,
+                ((1.0 - ratio) * 2.0).min(1.0),
+                1.0,
+            );
+            draw_circle(self.pos[i].x, self.pos[i].y, RADIUS, colour);
         }
     }
 }
