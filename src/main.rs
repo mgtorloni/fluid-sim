@@ -1,14 +1,17 @@
 use macroquad::prelude::*;
+use std::f32::consts::PI;
 
 const RADIUS: f32 = 4.0;
 const PPM: f32 = 20.0; // pixels per metre, play with this value. This value makes sense right now
-const GRAVITY: f32 = 9.80 * PPM;
+const GRAVITY: f32 = 0.0 * PPM;
 const RESTITUTION: f32 = 0.5;
+const INFLUENCE_RADIUS: f32 = 6.0;
 
 struct Particles {
     pos: Vec<Vec2>,
     vel: Vec<Vec2>,
 }
+
 impl Particles {
     fn new() -> Self {
         Self {
@@ -22,37 +25,23 @@ impl Particles {
         self.vel.push(vec2(vx, vy));
     }
 
-    fn collide(&mut self, i: usize, j: usize) -> bool {
-        let delta_length = self.pos[i] - self.pos[j];
-        let dist_sq = delta_length.length_squared();
-        let min_dist = RADIUS * 2.0;
-
-        if dist_sq < min_dist * min_dist {
-            // distance between two particles diameter, we collide particles
-            let dist = dist_sq.sqrt();
-            let normal = delta_length / dist;
-            let rel_vel = self.vel[i] - self.vel[j];
-            let vel_along_normal = rel_vel.dot(normal);
-            if vel_along_normal > 0.0 {
-                // Particle must be going in opposite direction to the one it will hit
-                //otherwise  no collision is happening
-                return false;
-            }
-
-            let impulse_mag = -(1.0 + RESTITUTION) * vel_along_normal / 2.0;
-
-            let impulse = normal * impulse_mag;
-            self.vel[i] += impulse;
-            self.vel[j] -= impulse;
-
-            let percent = 0.8;
-            let penetration = min_dist - dist;
-            let correction = normal * (penetration / 2.0) * percent;
-
-            self.pos[i] += correction;
-            self.pos[j] -= correction;
+    fn pressure_kernel(&mut self, i: usize, j: usize) -> f32 {
+        // Implement spiky kernel
+        // (15/(pi*h⁶))* (h-r)³ if 0<=r<=h
+        // 0 if h<r
+        let delta = self.pos[i] - self.pos[j];
+        let r = delta.length(); // magnitude of the vector pointing at particle i
+        if r <= INFLUENCE_RADIUS {
+            (15.0 / (PI * INFLUENCE_RADIUS.powf(6.0))) * (INFLUENCE_RADIUS - r).powf(3.0)
+        } else {
+            0.0
         }
-        true
+    }
+
+    fn density_kernel(&mut self, i: usize, j: usize) {
+        // Implement Poly6 kernel
+        //(315 / (64πh⁹)) * (h² - r²)³  if r <= h
+        // 0 if r>h
     }
 
     fn update(&mut self) {
@@ -77,10 +66,7 @@ impl Particles {
         let count = self.pos.len();
         for i in 0..count {
             for j in i + 1..count {
-                let collision = self.collide(i, j);
-                if !collision {
-                    continue;
-                }
+                let influence = self.pressure_kernel(i, j);
             }
         }
     }
@@ -104,8 +90,8 @@ impl Particles {
 fn conf() -> Conf {
     Conf {
         window_title: "fluidsim".to_owned(),
-        window_height: 600,
-        window_width: 600,
+        window_height: 900,
+        window_width: 1200,
         ..Default::default()
     }
 }
@@ -117,9 +103,11 @@ async fn main() {
     for _ in 0..1000 {
         simulation.spawn(
             rand::gen_range(0.0, screen_width()),
-            rand::gen_range(0.0, 200.0),
-            rand::gen_range(-50.0, 50.0),
-            rand::gen_range(-50.0, 50.0),
+            rand::gen_range(0.0, screen_height()),
+            0.0,
+            0.0,
+            // rand::gen_range(-50.0, 50.0),
+            // rand::gen_range(-50.0, 50.0),
         );
     }
 
