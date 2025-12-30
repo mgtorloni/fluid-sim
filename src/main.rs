@@ -5,11 +5,17 @@ const RADIUS: f32 = 4.0;
 const PPM: f32 = 20.0; // pixels per metre, play with this value. This value makes sense right now
 const GRAVITY: f32 = 0.0 * PPM;
 const RESTITUTION: f32 = 0.5;
-const INFLUENCE_RADIUS: f32 = 6.0;
+const INFLUENCE_RADIUS: f32 = 100.0;
+const MASS: f32 = 1.0;
+const GAS_CONSTANT: f32 = 100000.0;
+const REST_DENSITY: f32 = 0.001;
 
 struct Particles {
     pos: Vec<Vec2>,
     vel: Vec<Vec2>,
+    density: Vec<f32>,
+    pressure: Vec<f32>,
+    force: Vec<Vec2>,
 }
 
 impl Particles {
@@ -17,15 +23,22 @@ impl Particles {
         Self {
             pos: Vec::new(),
             vel: Vec::new(),
+            density: Vec::new(),
+            pressure: Vec::new(),
+            force: Vec::new(),
         }
     }
 
-    fn spawn(&mut self, x: f32, y: f32, vx: f32, vy: f32) {
+    fn spawn(&mut self, x: f32, y: f32, vx: f32, vy: f32, density: f32, ro: f32, fx: f32, fy: f32) {
         self.pos.push(vec2(x, y));
         self.vel.push(vec2(vx, vy));
+        self.density.push(density);
+        self.pressure.push(ro);
+        self.force.push(vec2(fx, fy));
     }
 
-    fn pressure_kernel(&mut self, i: usize, j: usize) -> f32 {
+    fn spiky_kernel(&mut self, i: usize, j: usize) -> f32 {
+        // Used for pressure
         // Implement spiky kernel
         // (15/(pi*h⁶))* (h-r)³ if 0<=r<=h
         // 0 if h<r
@@ -37,11 +50,34 @@ impl Particles {
             0.0
         }
     }
+    fn spiky_kernel_gradient(&mut self, i: usize, j: usize) -> Vec2 {
+        // Used for force calculations
+        // Implement spiky kernel
+        // (-45/(pi*h⁶)) * (h-r)² * r̂ if 0<=r<=h
+        // 0 if h<r
+        let delta = self.pos[i] - self.pos[j];
+        let r = delta.length(); // magnitude of the vector pointing at particle i
+        let r_hat = delta / r;
+        if r <= INFLUENCE_RADIUS {
+            (-45.0 / (PI * INFLUENCE_RADIUS.powf(6.0))) * (INFLUENCE_RADIUS - r).powf(2.0) * r_hat
+        } else {
+            vec2(0.0, 0.0)
+        }
+    }
 
-    fn density_kernel(&mut self, i: usize, j: usize) {
+    fn poly_kernel(&mut self, i: usize, j: usize) -> f32 {
+        // used for density
         // Implement Poly6 kernel
         //(315 / (64πh⁹)) * (h² - r²)³  if r <= h
         // 0 if r>h
+        let delta = self.pos[i] - self.pos[j];
+        let r = delta.length(); // magnitude of the vector pointing at particle i
+        if r <= INFLUENCE_RADIUS {
+            (315.0 / (64.0 * PI * INFLUENCE_RADIUS.powf(9.0)))
+                * (INFLUENCE_RADIUS.powf(2.0) - r.powf(2.0)).powf(3.0)
+        } else {
+            0.0
+        }
     }
 
     fn update(&mut self) {
@@ -61,13 +97,42 @@ impl Particles {
             if self.pos[i].y >= screen_height() - RADIUS {
                 self.vel[i].y = -self.vel[i].y * RESTITUTION;
                 self.pos[i].y = screen_height() - RADIUS;
+            } else if self.pos[i].y <= RADIUS {
+                self.vel[i].y = -self.vel[i].y * RESTITUTION;
+                self.pos[i].y = RADIUS;
             }
         }
         let count = self.pos.len();
         for i in 0..count {
-            for j in i + 1..count {
-                let influence = self.pressure_kernel(i, j);
+            self.density[i] = 0.0;
+            self.pressure[i] = 0.0;
+            self.force[i] = vec2(0.0, 0.0);
+            for j in 0..count {
+                self.density[i] += MASS * self.poly_kernel(i, j);
             }
+            self.pressure[i] += GAS_CONSTANT * (self.density[i] - REST_DENSITY);
+        }
+        for i in 0..count {
+            for j in 0..count {
+                if i == j {
+                    //NOTE: if i=j then the distance between the "two" particles
+                    //is 0 and that grad_spiky will be NaN causing force calculation to fail
+                    continue;
+                }
+                let grad_spiky = self.spiky_kernel_gradient(i, j);
+                if self.density[j] == 0.0 {
+                    //FIX: DENSITY IS 0 SOMETIMES FOR SOME REASON
+                    //THIS CAUSES THE FORCE CALCULATION TO BE NaN
+                    //THIS HAPPENS AFTER A FEW MINUTES OF THE SIMULATION RUNNING.
+                    println!("oh boy...");
+                    continue;
+                }
+
+                self.force[i] += MASS
+                    * ((self.pressure[i] + self.pressure[j]) / (2.0 * self.density[j]))
+                    * grad_spiky;
+            }
+            self.vel[i] += (self.force[i] / MASS) * dt;
         }
     }
     fn draw(&self) {
@@ -90,8 +155,8 @@ impl Particles {
 fn conf() -> Conf {
     Conf {
         window_title: "fluidsim".to_owned(),
-        window_height: 900,
-        window_width: 1200,
+        window_height: 600,
+        window_width: 800,
         ..Default::default()
     }
 }
@@ -106,7 +171,10 @@ async fn main() {
             rand::gen_range(0.0, screen_height()),
             0.0,
             0.0,
-            // rand::gen_range(-50.0, 50.0),
+            0.0,
+            0.0,
+            0.0,
+            0.0,
             // rand::gen_range(-50.0, 50.0),
         );
     }
@@ -116,6 +184,6 @@ async fn main() {
         simulation.update();
         simulation.draw();
 
-        next_frame().await
+        next_frame().await;
     }
 }
