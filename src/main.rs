@@ -1,15 +1,10 @@
 use macroquad::prelude::*;
-use std::f32::consts::PI;
 
-const RADIUS: f32 = 6.0;
-const PPM: f32 = 20.0; // pixels per metre, play with this value. This value makes sense right now
-const GRAVITY: f32 = 0.0 * PPM;
-const DAMPING: f32 = 0.5;
-const WALL_PRESSURE_FORCE: f32 = 200.0;
-const INFLUENCE_RADIUS: f32 = 50.0;
-const MASS: f32 = 1.0;
-const GAS_CONSTANT: f32 = 100000.0;
-const REST_DENSITY: f32 = 1.0;
+mod constants;
+use crate::constants::*;
+
+mod kernels;
+use crate::kernels::{poly_kernel, spiky_kernel_gradient};
 
 struct Particles {
     pos: Vec<Vec2>,
@@ -47,44 +42,6 @@ impl Particles {
         self.pressure.push(pressure);
         self.force.push(vec2(fx, fy));
     }
-    fn spiky_kernel_gradient(&mut self, i: usize, j: usize) -> Vec2 {
-        // Used for pressure force calculations
-        // (-45/(pi*h⁶)) * (h-r)² * r̂ if 0<=r<=h
-        // 0 if h<r
-        let delta = self.pos[i] - self.pos[j];
-        let r = delta.length(); // magnitude of the vector pointing at particle i
-
-        if r < 0.00001 {
-            // particles can be in the same position in which case send them in random direction
-            let theta = rand::gen_range(0.0, 2.0 * PI);
-
-            let random_dir = vec2(theta.cos(), theta.sin());
-
-            return (-45.0 / (PI * INFLUENCE_RADIUS.powf(6.0)))
-                * (INFLUENCE_RADIUS).powf(2.0)
-                * random_dir;
-        }
-        let r_hat = delta / r;
-        if r <= INFLUENCE_RADIUS {
-            (-45.0 / (PI * INFLUENCE_RADIUS.powf(6.0))) * (INFLUENCE_RADIUS - r).powf(2.0) * r_hat
-        } else {
-            vec2(0.0, 0.0)
-        }
-    }
-
-    fn poly_kernel(&mut self, i: usize, j: usize) -> f32 {
-        // used for density
-        //(315 / (64πh⁹)) * (h² - r²)³  if r <= h
-        // 0 if r>h
-        let delta = self.pos[i] - self.pos[j];
-        let r = delta.length(); // magnitude of the vector pointing at particle i
-        if r <= INFLUENCE_RADIUS {
-            (315.0 / (64.0 * PI * INFLUENCE_RADIUS.powf(9.0)))
-                * (INFLUENCE_RADIUS.powf(2.0) - r.powf(2.0)).powf(3.0)
-        } else {
-            0.0
-        }
-    }
 
     fn update(&mut self) {
         let dt = get_frame_time();
@@ -113,7 +70,7 @@ impl Particles {
             self.pressure[i] = 0.0;
             self.force[i] = vec2(0.0, 0.0);
             for j in 0..count {
-                self.density[i] += MASS * self.poly_kernel(i, j);
+                self.density[i] += MASS * poly_kernel(self.pos[i], self.pos[j]);
             }
             self.pressure[i] += GAS_CONSTANT * (self.density[i] - REST_DENSITY);
         }
@@ -124,7 +81,7 @@ impl Particles {
                     //is 0 and that grad_spiky will be NaN causing force calculation to fail
                     continue;
                 }
-                let grad_spiky = self.spiky_kernel_gradient(i, j);
+                let grad_spiky = spiky_kernel_gradient(self.pos[i], self.pos[j]);
 
                 self.force[i] += MASS
                     * ((self.pressure[i] + self.pressure[j]) / (2.0 * self.density[j]))
@@ -153,8 +110,7 @@ impl Particles {
 fn conf() -> Conf {
     Conf {
         window_title: "fluidsim".to_owned(),
-        window_height: 900,
-        window_width: 1200,
+        fullscreen: true,
         ..Default::default()
     }
 }
@@ -162,8 +118,9 @@ fn conf() -> Conf {
 #[macroquad::main(conf)]
 async fn main() {
     let mut simulation = Particles::new();
+    next_frame().await;
 
-    for _ in 0..400 {
+    for _ in 0..600 {
         simulation.spawn(
             rand::gen_range(0.0, screen_width()),
             rand::gen_range(0.0, screen_height()),
@@ -178,10 +135,9 @@ async fn main() {
     }
 
     loop {
+        next_frame().await;
         clear_background(DARKGRAY);
         simulation.update();
         simulation.draw();
-
-        next_frame().await;
     }
 }

@@ -1,0 +1,9 @@
+pub const RADIUS: f32 = 6.0;
+pub const PPM: f32 = 20.0; // pixels per metre, play with this value. This value makes sense right now
+pub const GRAVITY: f32 = 0.0 * PPM;
+pub const DAMPING: f32 = 0.5;
+pub const WALL_PRESSURE_FORCE: f32 = 200.0;
+pub const INFLUENCE_RADIUS: f32 = 50.0;
+pub const MASS: f32 = 1.0;
+pub const GAS_CONSTANT: f32 = 100000.0;
+pub const REST_DENSITY: f32 = 1.0;
