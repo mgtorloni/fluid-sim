@@ -1,15 +1,15 @@
 use macroquad::prelude::*;
 use std::f32::consts::PI;
 
-const RADIUS: f32 = 4.0;
+const RADIUS: f32 = 6.0;
 const PPM: f32 = 20.0; // pixels per metre, play with this value. This value makes sense right now
 const GRAVITY: f32 = 0.0 * PPM;
 const DAMPING: f32 = 0.5;
 const WALL_PRESSURE_FORCE: f32 = 200.0;
 const INFLUENCE_RADIUS: f32 = 50.0;
 const MASS: f32 = 1.0;
-const GAS_CONSTANT: f32 = 2000.0;
-const REST_DENSITY: f32 = 0.5;
+const GAS_CONSTANT: f32 = 100000.0;
+const REST_DENSITY: f32 = 1.0;
 
 struct Particles {
     pos: Vec<Vec2>,
@@ -48,7 +48,7 @@ impl Particles {
         self.force.push(vec2(fx, fy));
     }
     fn spiky_kernel_gradient(&mut self, i: usize, j: usize) -> Vec2 {
-        // Used for force calculations
+        // Used for pressure force calculations
         // (-45/(pi*h⁶)) * (h-r)² * r̂ if 0<=r<=h
         // 0 if h<r
         let delta = self.pos[i] - self.pos[j];
@@ -125,9 +125,6 @@ impl Particles {
                     continue;
                 }
                 let grad_spiky = self.spiky_kernel_gradient(i, j);
-                if self.density[j] == 0.0 {
-                    continue;
-                }
 
                 self.force[i] += MASS
                     * ((self.pressure[i] + self.pressure[j]) / (2.0 * self.density[j]))
