@@ -4,11 +4,12 @@ use std::f32::consts::PI;
 const RADIUS: f32 = 4.0;
 const PPM: f32 = 20.0; // pixels per metre, play with this value. This value makes sense right now
 const GRAVITY: f32 = 0.0 * PPM;
-const RESTITUTION: f32 = 0.5;
-const INFLUENCE_RADIUS: f32 = 100.0;
+const DAMPING: f32 = 0.5;
+const WALL_PRESSURE_FORCE: f32 = 200.0;
+const INFLUENCE_RADIUS: f32 = 50.0;
 const MASS: f32 = 1.0;
-const GAS_CONSTANT: f32 = 100000.0;
-const REST_DENSITY: f32 = 0.001;
+const GAS_CONSTANT: f32 = 2000.0;
+const REST_DENSITY: f32 = 0.5;
 
 struct Particles {
     pos: Vec<Vec2>,
@@ -29,34 +30,40 @@ impl Particles {
         }
     }
 
-    fn spawn(&mut self, x: f32, y: f32, vx: f32, vy: f32, density: f32, ro: f32, fx: f32, fy: f32) {
+    fn spawn(
+        &mut self,
+        x: f32,
+        y: f32,
+        vx: f32,
+        vy: f32,
+        rho: f32,
+        pressure: f32,
+        fx: f32,
+        fy: f32,
+    ) {
         self.pos.push(vec2(x, y));
         self.vel.push(vec2(vx, vy));
-        self.density.push(density);
-        self.pressure.push(ro);
+        self.density.push(rho);
+        self.pressure.push(pressure);
         self.force.push(vec2(fx, fy));
-    }
-
-    fn spiky_kernel(&mut self, i: usize, j: usize) -> f32 {
-        // Used for pressure
-        // Implement spiky kernel
-        // (15/(pi*h⁶))* (h-r)³ if 0<=r<=h
-        // 0 if h<r
-        let delta = self.pos[i] - self.pos[j];
-        let r = delta.length(); // magnitude of the vector pointing at particle i
-        if r <= INFLUENCE_RADIUS {
-            (15.0 / (PI * INFLUENCE_RADIUS.powf(6.0))) * (INFLUENCE_RADIUS - r).powf(3.0)
-        } else {
-            0.0
-        }
     }
     fn spiky_kernel_gradient(&mut self, i: usize, j: usize) -> Vec2 {
         // Used for force calculations
-        // Implement spiky kernel
         // (-45/(pi*h⁶)) * (h-r)² * r̂ if 0<=r<=h
         // 0 if h<r
         let delta = self.pos[i] - self.pos[j];
         let r = delta.length(); // magnitude of the vector pointing at particle i
+
+        if r < 0.00001 {
+            // particles can be in the same position in which case send them in random direction
+            let theta = rand::gen_range(0.0, 2.0 * PI);
+
+            let random_dir = vec2(theta.cos(), theta.sin());
+
+            return (-45.0 / (PI * INFLUENCE_RADIUS.powf(6.0)))
+                * (INFLUENCE_RADIUS).powf(2.0)
+                * random_dir;
+        }
         let r_hat = delta / r;
         if r <= INFLUENCE_RADIUS {
             (-45.0 / (PI * INFLUENCE_RADIUS.powf(6.0))) * (INFLUENCE_RADIUS - r).powf(2.0) * r_hat
@@ -67,7 +74,6 @@ impl Particles {
 
     fn poly_kernel(&mut self, i: usize, j: usize) -> f32 {
         // used for density
-        // Implement Poly6 kernel
         //(315 / (64πh⁹)) * (h² - r²)³  if r <= h
         // 0 if r>h
         let delta = self.pos[i] - self.pos[j];
@@ -86,19 +92,18 @@ impl Particles {
         for i in 0..count {
             self.vel[i].y += GRAVITY * dt; // v = u + at
             self.pos[i] += self.vel[i] * dt; // s = u + vt
-
             if self.pos[i].x >= screen_width() - RADIUS {
-                self.vel[i].x *= -RESTITUTION;
+                self.vel[i].x = -self.vel[i].x * DAMPING - (WALL_PRESSURE_FORCE) * dt;
                 self.pos[i].x = screen_width() - RADIUS;
             } else if self.pos[i].x <= RADIUS {
-                self.vel[i].x = -self.vel[i].x * RESTITUTION;
+                self.vel[i].x = -self.vel[i].x * DAMPING + (WALL_PRESSURE_FORCE) * dt;
                 self.pos[i].x = RADIUS;
             }
             if self.pos[i].y >= screen_height() - RADIUS {
-                self.vel[i].y = -self.vel[i].y * RESTITUTION;
+                self.vel[i].y = -self.vel[i].y * DAMPING - (WALL_PRESSURE_FORCE) * dt;
                 self.pos[i].y = screen_height() - RADIUS;
             } else if self.pos[i].y <= RADIUS {
-                self.vel[i].y = -self.vel[i].y * RESTITUTION;
+                self.vel[i].y = -self.vel[i].y * DAMPING + (WALL_PRESSURE_FORCE) * dt;
                 self.pos[i].y = RADIUS;
             }
         }
@@ -121,10 +126,6 @@ impl Particles {
                 }
                 let grad_spiky = self.spiky_kernel_gradient(i, j);
                 if self.density[j] == 0.0 {
-                    //FIX: DENSITY IS 0 SOMETIMES FOR SOME REASON
-                    //THIS CAUSES THE FORCE CALCULATION TO BE NaN
-                    //THIS HAPPENS AFTER A FEW MINUTES OF THE SIMULATION RUNNING.
-                    println!("oh boy...");
                     continue;
                 }
 
@@ -147,7 +148,7 @@ impl Particles {
             //     1.0,
             // );
             let colour = Color::new(ratio, 0.0, 1.0 - ratio, 1.0);
-            draw_circle(self.pos[i].x, self.pos[i].y, RADIUS, colour);
+            draw_circle(self.pos[i].x, self.pos[i].y, RADIUS, WHITE);
         }
     }
 }
@@ -155,8 +156,8 @@ impl Particles {
 fn conf() -> Conf {
     Conf {
         window_title: "fluidsim".to_owned(),
-        window_height: 600,
-        window_width: 800,
+        window_height: 900,
+        window_width: 1200,
         ..Default::default()
     }
 }
@@ -165,7 +166,7 @@ fn conf() -> Conf {
 async fn main() {
     let mut simulation = Particles::new();
 
-    for _ in 0..1000 {
+    for _ in 0..400 {
         simulation.spawn(
             rand::gen_range(0.0, screen_width()),
             rand::gen_range(0.0, screen_height()),
@@ -180,7 +181,7 @@ async fn main() {
     }
 
     loop {
-        clear_background(WHITE);
+        clear_background(DARKGRAY);
         simulation.update();
         simulation.draw();
 
