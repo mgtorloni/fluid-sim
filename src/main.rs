@@ -1,10 +1,12 @@
+use colorgrad::{Gradient, GradientBuilder, LinearGradient};
 use macroquad::prelude::*;
-
 mod constants;
-use crate::constants::*;
-
 mod kernels;
-use crate::kernels::{poly_kernel, spiky_kernel_gradient};
+mod physics;
+use crate::constants::*;
+use crate::physics::{
+    calculate_density_force, calculate_gravity_force, calculate_pressure, calculate_pressure_force,
+};
 
 type ParticleVector = Vec2;
 type ParticleScalar = f32;
@@ -44,60 +46,53 @@ impl Particles {
         self.force.push(particle.force);
     }
 
-    fn boundaries(&mut self, dt: f32) {
-        let count = self.pos.len();
-        for i in 0..count {
-            // self.vel[i].y += GRAVITY * dt; // v = u + at
-            self.pos[i] += self.vel[i] * dt; // s = u + vt
-            if self.pos[i].x >= screen_width() - RADIUS {
-                self.vel[i].x = -self.vel[i].x * DAMPING - (WALL_PRESSURE_FORCE) * dt;
-                self.pos[i].x = screen_width() - RADIUS;
-            } else if self.pos[i].x <= RADIUS {
-                self.vel[i].x = -self.vel[i].x * DAMPING + (WALL_PRESSURE_FORCE) * dt;
-                self.pos[i].x = RADIUS;
-            }
-            if self.pos[i].y >= screen_height() - RADIUS {
-                self.vel[i].y = -self.vel[i].y * DAMPING - (WALL_PRESSURE_FORCE) * dt;
-                self.pos[i].y = screen_height() - RADIUS;
-            } else if self.pos[i].y <= RADIUS {
-                self.vel[i].y = -self.vel[i].y * DAMPING + (WALL_PRESSURE_FORCE) * dt;
-                self.pos[i].y = RADIUS;
-            }
+    fn boundaries(&mut self, dt: f32, i: usize) {
+        // self.vel[i].y += GRAVITY * dt; // v = u + at
+        self.pos[i] += self.vel[i] * dt; // s = u + vt
+        if self.pos[i].x >= screen_width() - RADIUS {
+            self.vel[i].x = -self.vel[i].x * DAMPING - (WALL_PRESSURE_FORCE) * dt;
+            self.pos[i].x = screen_width() - RADIUS;
+        } else if self.pos[i].x <= RADIUS {
+            self.vel[i].x = -self.vel[i].x * DAMPING + (WALL_PRESSURE_FORCE) * dt;
+            self.pos[i].x = RADIUS;
+        }
+        if self.pos[i].y >= screen_height() - RADIUS {
+            self.vel[i].y = -self.vel[i].y * DAMPING - (WALL_PRESSURE_FORCE) * dt;
+            self.pos[i].y = screen_height() - RADIUS;
+        } else if self.pos[i].y <= RADIUS {
+            self.vel[i].y = -self.vel[i].y * DAMPING + (WALL_PRESSURE_FORCE) * dt;
+            self.pos[i].y = RADIUS;
         }
     }
-
-    fn calculate_pressure_force(&mut self, i: usize, j: usize) -> Vec2 {
-        let grad_spiky = spiky_kernel_gradient(self.pos[i], self.pos[j]);
-
-        MASS * ((self.pressure[i] + self.pressure[j]) / (2.0 * self.density[j])) * grad_spiky
-    }
-
-    fn calculate_gravity_force(&mut self, i: usize) -> Vec2 {
-        self.density[i] * GRAVITY
-    }
-
     fn update(&mut self, dt: f32) {
-        self.boundaries(dt);
-        let count = self.pos.len();
-        for i in 0..count {
+        for i in 0..NO_PARTICLES {
+            self.boundaries(dt, i);
             self.density[i] = 0.0;
             self.pressure[i] = 0.0;
             self.force[i] = vec2(0.0, 0.0);
-            for j in 0..count {
-                self.density[i] += MASS * poly_kernel(self.pos[i], self.pos[j]);
+            for j in 0..NO_PARTICLES {
+                self.density[i] += calculate_density_force(self.pos[i], self.pos[j]);
             }
-            println!("{}", self.density[i]);
-            self.pressure[i] += GAS_CONSTANT * (self.density[i] - REST_DENSITY);
+            self.pressure[i] += calculate_pressure(self.density[i]);
         }
-        for i in 0..count {
-            for j in 0..count {
+        for i in 0..NO_PARTICLES {
+            println!("Pressure:{}", self.pressure[i]);
+            println!("Density: {}", self.density[i]);
+            //FIX: DENSITY VALUES ARE SO SMALL THAT PRESSURE IS ALWAYS THE SAME
+            for j in 0..NO_PARTICLES {
                 if i == j {
                     //NOTE: if i=j then the distance between the "two" particles
-                    //is 0 and that grad_spiky will be NaN causing force calculation to fail
+                    // is 0 and that grad_spiky will be NaN causing pressure force calculation to fail
                     continue;
                 }
-                let pressure_force = self.calculate_pressure_force(i, j);
-                let gravity_force = self.calculate_gravity_force(i);
+                let pressure_force = calculate_pressure_force(
+                    self.pos[i],
+                    self.pos[j],
+                    self.pressure[i],
+                    self.pressure[j],
+                    self.density[j],
+                );
+                let gravity_force = calculate_gravity_force(self.density[i]);
                 self.force[i] += pressure_force;
                 self.force[i] += gravity_force;
             }
@@ -106,18 +101,25 @@ impl Particles {
     }
 
     fn draw(&self) {
-        let max_speed: f32 = 100.0;
+        let gradient = GradientBuilder::new()
+            .colors(&[
+                colorgrad::Color::from_rgba8(255, 255, 255, 255), // blue
+                colorgrad::Color::from_rgba8(255, 0, 0, 255),     // red
+            ])
+            .build::<LinearGradient>()
+            .expect("Failed to build gradient");
 
         for i in 0..self.pos.len() {
-            let ratio: f32 = (self.vel[i].length() / max_speed).min(1.0);
-            // let colour = Color::new(
-            //     (ratio * 2.0).min(1.0),
-            //     1.0 - (ratio - 0.5).abs() * 2.0,
-            //     ((1.0 - ratio) * 2.0).min(1.0),
-            //     1.0,
-            // );
-            let colour = Color::new(ratio, 0.0, 1.0 - ratio, 1.0);
-            draw_circle(self.pos[i].x, self.pos[i].y, RADIUS, WHITE);
+            let pos = self.pos[i];
+            let speed = self.vel[i].length();
+
+            // Normalize speed into [0, 1]
+            let t = (speed / 1000.0).clamp(0.0, 1.0);
+
+            let [r, g, b, a] = gradient.at(t).to_rgba8();
+            let color = Color::from_rgba(r, g, b, a);
+
+            draw_circle(pos.x, pos.y, RADIUS, color);
         }
     }
 }
@@ -134,8 +136,7 @@ fn conf() -> Conf {
 async fn main() {
     let mut simulation = Particles::new();
     next_frame().await;
-
-    for _ in 0..600 {
+    for _ in 0..NO_PARTICLES {
         simulation.spawn(Particle {
             pos: vec2(
                 rand::gen_range(0.0, screen_width()),
@@ -150,7 +151,7 @@ async fn main() {
     }
 
     loop {
-        let dt = get_frame_time();
+        let dt = 1.0 / 60.0;
         clear_background(DARKGRAY);
         simulation.update(dt);
         simulation.draw();
