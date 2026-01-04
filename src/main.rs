@@ -93,7 +93,7 @@ impl Particles {
                     self.density[j],
                 );
                 let gravity_force = calculate_gravity_force(self.density[i]);
-                self.force[i] += pressure_force;
+                self.force[i] -= pressure_force;
                 self.force[i] += gravity_force;
             }
             self.vel[i] += (self.force[i] / MASS) * dt;
