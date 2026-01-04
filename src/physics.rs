@@ -21,6 +21,6 @@ pub fn calculate_pressure_force(
 pub fn calculate_gravity_force(density: f32) -> Vec2 {
     density * GRAVITY
 }
-pub fn calculate_density_force(pos: Vec2, pos_other: Vec2) -> f32 {
+pub fn calculate_density(pos: Vec2, pos_other: Vec2) -> f32 {
     MASS * poly_kernel(pos, pos_other)
 }

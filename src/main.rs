@@ -5,7 +5,7 @@ mod kernels;
 mod physics;
 use crate::constants::*;
 use crate::physics::{
-    calculate_density_force, calculate_gravity_force, calculate_pressure, calculate_pressure_force,
+    calculate_density, calculate_gravity_force, calculate_pressure, calculate_pressure_force,
 };
 
 type ParticleVector = Vec2;
@@ -47,7 +47,7 @@ impl Particles {
     }
 
     fn boundaries(&mut self, dt: f32, i: usize) {
-        // self.vel[i].y += GRAVITY * dt; // v = u + at
+        self.vel[i] += GRAVITY * dt; // v = u + at
         self.pos[i] += self.vel[i] * dt; // s = u + vt
         if self.pos[i].x >= screen_width() - RADIUS {
             self.vel[i].x = -self.vel[i].x * DAMPING - (WALL_PRESSURE_FORCE) * dt;
@@ -71,7 +71,7 @@ impl Particles {
             self.pressure[i] = 0.0;
             self.force[i] = vec2(0.0, 0.0);
             for j in 0..NO_PARTICLES {
-                self.density[i] += calculate_density_force(self.pos[i], self.pos[j]);
+                self.density[i] += calculate_density(self.pos[i], self.pos[j]);
             }
             self.pressure[i] += calculate_pressure(self.density[i]);
         }
