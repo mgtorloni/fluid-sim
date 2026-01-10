@@ -4,7 +4,6 @@ use crate::constants::{GAS_CONSTANT, GRAVITY, MASS, REST_DENSITY};
 
 pub fn calculate_pressure(density: f32) -> f32 {
     let pressure = GAS_CONSTANT * (density - REST_DENSITY);
-    println!("{}", density);
     pressure.max(0.0)
 }
 
@@ -13,11 +12,13 @@ pub fn calculate_pressure_force(
     pos_other: Vec2,
     pressure: f32,
     pressure_other: f32,
+    // density: f32,
     density_other: f32,
 ) -> Vec2 {
     let grad_spiky = spiky_kernel_gradient(pos, pos_other);
 
     MASS * ((pressure + pressure_other) / (2.0 * density_other)) * grad_spiky
+    // MASS * ((pressure / density.powi(2)) + (pressure_other / density_other.powi(2))) * grad_spiky
 }
 
 pub fn calculate_gravity_force(density: f32) -> Vec2 {

@@ -47,35 +47,48 @@ impl Particles {
         self.force.push(particle.force);
     }
 
-    fn boundaries(pos: &mut Vec2, vel: &mut Vec2) {
+    fn boundaries(pos: &mut Vec2, vel: &mut Vec2, force: &mut Vec2, pressure: f32, density: f32) {
         let world_width = screen_width() / SCALE;
         let world_height = screen_height() / SCALE;
+
         let particle_radius_m = RADIUS / SCALE;
 
         if pos.x >= world_width - particle_radius_m {
+            if vel.x <= 0.5 {
+                vel.y = 0.0;
+            }
             vel.x = -vel.x * DAMPING;
             pos.x = world_width - particle_radius_m;
         } else if pos.x <= particle_radius_m {
+            if vel.x <= 0.5 {
+                vel.y = 0.0;
+            }
             vel.x = -vel.x * DAMPING;
             pos.x = particle_radius_m;
         }
 
         if pos.y >= world_height - particle_radius_m {
+            if vel.y <= 0.5 {
+                vel.x = 0.0;
+            }
             vel.y = -vel.y * DAMPING;
             pos.y = world_height - particle_radius_m;
         } else if pos.y <= particle_radius_m {
+            if vel.y <= 0.5 {
+                vel.x = 0.0;
+            }
             vel.y = -vel.y * DAMPING;
             pos.y = particle_radius_m;
         }
     }
 
-    fn mouse_action(pos: &Vec2) -> Vec2 {
+    fn mouse_action(pos: Vec2) -> Vec2 {
         let (mx, my) = mouse_position();
         let mouse_pos = vec2(mx / SCALE, my / SCALE);
         let is_pushing = is_mouse_button_down(MouseButton::Left);
 
         if is_pushing {
-            let delta = *pos - mouse_pos;
+            let delta = pos - mouse_pos;
             let dist = delta.length();
 
             if dist < MOUSE_INFLUENCE_RADIUS && dist > 0.0001 {
@@ -93,8 +106,6 @@ impl Particles {
     fn update(&mut self, dt: f32) {
         for i in 0..NO_PARTICLES {
             self.density[i] = 0.0;
-            self.pressure[i] = 0.0;
-            self.force[i] = Vec2::ZERO;
 
             for j in 0..NO_PARTICLES {
                 self.density[i] += calculate_density(self.pos[i], self.pos[j]);
@@ -102,35 +113,49 @@ impl Particles {
 
             self.pressure[i] = calculate_pressure(self.density[i]);
         }
-        let pos = &mut self.pos;
-        let pressure = &self.pressure;
-        let density = &self.density;
-        let force = &mut self.force; // We need to write to this
-        let vel = &mut self.vel;
         (0..NO_PARTICLES).for_each(|i| {
+            self.force[i] = Vec2::ZERO;
             (0..NO_PARTICLES).for_each(|j| {
                 if i == j {
                     return;
                 }
 
-                let pressure_force =
-                    calculate_pressure_force(pos[i], pos[j], pressure[i], pressure[j], density[j]);
+                let pressure_force = calculate_pressure_force(
+                    self.pos[i],
+                    self.pos[j],
+                    self.pressure[i],
+                    self.pressure[j],
+                    self.density[j],
+                );
 
-                force[i] -= pressure_force;
+                self.force[i] -= pressure_force;
             });
 
-            let gravity_force = calculate_gravity_force(density[i]);
-            force[i] += gravity_force;
-
-            let acceleration = force[i] / density[i];
-
-            vel[i] += acceleration * dt;
-            let mouse_vel = Self::mouse_action(&pos[i]);
-            vel[i] += mouse_vel;
-
-            pos[i] += vel[i] * dt;
-            Self::boundaries(&mut pos[i], &mut vel[i]);
+            let gravity_force = calculate_gravity_force(self.density[i]);
+            self.force[i] += gravity_force;
         });
+        for i in 0..NO_PARTICLES {
+            let acceleration = self.force[i] / self.density[i];
+
+            self.vel[i] += acceleration * dt;
+
+            let mouse_vel = Self::mouse_action(self.pos[i]);
+            self.vel[i] += mouse_vel;
+
+            if self.vel[i].length_squared() > MAX_VEL * MAX_VEL {
+                self.vel[i] = (self.vel[i] / self.vel[i].length()) * MAX_VEL;
+            }
+
+            self.pos[i] += self.vel[i] * dt;
+
+            Self::boundaries(
+                &mut self.pos[i],
+                &mut self.vel[i],
+                &mut self.force[i],
+                self.pressure[i],
+                self.density[i],
+            );
+        }
     }
 
     fn draw(&self) {
@@ -144,9 +169,10 @@ impl Particles {
 
         for i in 0..self.pos.len() {
             let pixel_pos = self.pos[i] * SCALE;
+            println!("{}", self.vel[i]);
 
             let speed = self.vel[i].length();
-            let t = (speed / 5.0).clamp(0.0, 1.0);
+            let t = (speed / MAX_VEL).clamp(0.0, 1.0);
 
             let [r, g, b, a] = gradient.at(t).to_rgba8();
             let color = Color::from_rgba(r, g, b, a);
@@ -170,7 +196,7 @@ async fn main() {
     let mut simulation = Particles::new();
 
     // let cols = 20;
-    // let rows = 30;
+    // let rows = 20;
     // let spacing = 0.1; // 10cm spacing
     //
     // let grid_width = cols as f32 * spacing;
