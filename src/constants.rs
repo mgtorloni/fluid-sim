@@ -1,8 +1,8 @@
 use crate::vec2;
 use macroquad::prelude::Vec2;
 
-pub const NO_PARTICLES: usize = 400;
-pub const MAX_VEL: f32 = 20.0;
+pub const NO_PARTICLES: usize = 700;
+pub const MAX_VEL: f32 = 30.0;
 pub const SCALE: f32 = 50.0;
 pub const RADIUS: f32 = 6.0;
 pub const MASS: f32 = 1.0;

@@ -47,36 +47,36 @@ impl Particles {
         self.force.push(particle.force);
     }
 
-    fn boundaries(pos: &mut Vec2, vel: &mut Vec2, force: &mut Vec2, pressure: f32, density: f32) {
+    fn boundaries(pos: &mut Vec2, vel: &mut Vec2) {
         let world_width = screen_width() / SCALE;
         let world_height = screen_height() / SCALE;
 
         let particle_radius_m = RADIUS / SCALE;
 
         if pos.x >= world_width - particle_radius_m {
-            if vel.x <= 0.5 {
-                vel.y = 0.0;
-            }
+            // if vel.x <= 0.5 {
+            //     vel.y = 0.0;
+            // }
             vel.x = -vel.x * DAMPING;
             pos.x = world_width - particle_radius_m;
         } else if pos.x <= particle_radius_m {
-            if vel.x <= 0.5 {
-                vel.y = 0.0;
-            }
+            // if vel.x <= 0.5 {
+            //     vel.y = 0.0;
+            // }
             vel.x = -vel.x * DAMPING;
             pos.x = particle_radius_m;
         }
 
         if pos.y >= world_height - particle_radius_m {
-            if vel.y <= 0.5 {
-                vel.x = 0.0;
-            }
+            // if vel.y <= 0.5 {
+            //     vel.x = 0.0;
+            // }
             vel.y = -vel.y * DAMPING;
             pos.y = world_height - particle_radius_m;
         } else if pos.y <= particle_radius_m {
-            if vel.y <= 0.5 {
-                vel.x = 0.0;
-            }
+            // if vel.y <= 0.5 {
+            //     vel.x = 0.0;
+            // }
             vel.y = -vel.y * DAMPING;
             pos.y = particle_radius_m;
         }
@@ -102,38 +102,7 @@ impl Particles {
         }
         Vec2::ZERO
     }
-
-    fn update(&mut self, dt: f32) {
-        for i in 0..NO_PARTICLES {
-            self.density[i] = 0.0;
-
-            for j in 0..NO_PARTICLES {
-                self.density[i] += calculate_density(self.pos[i], self.pos[j]);
-            }
-
-            self.pressure[i] = calculate_pressure(self.density[i]);
-        }
-        (0..NO_PARTICLES).for_each(|i| {
-            self.force[i] = Vec2::ZERO;
-            (0..NO_PARTICLES).for_each(|j| {
-                if i == j {
-                    return;
-                }
-
-                let pressure_force = calculate_pressure_force(
-                    self.pos[i],
-                    self.pos[j],
-                    self.pressure[i],
-                    self.pressure[j],
-                    self.density[j],
-                );
-
-                self.force[i] -= pressure_force;
-            });
-
-            let gravity_force = calculate_gravity_force(self.density[i]);
-            self.force[i] += gravity_force;
-        });
+    fn integrate(&mut self, dt: f32) {
         for i in 0..NO_PARTICLES {
             let acceleration = self.force[i] / self.density[i];
 
@@ -148,14 +117,69 @@ impl Particles {
 
             self.pos[i] += self.vel[i] * dt;
 
-            Self::boundaries(
-                &mut self.pos[i],
-                &mut self.vel[i],
-                &mut self.force[i],
-                self.pressure[i],
-                self.density[i],
-            );
+            Self::boundaries(&mut self.pos[i], &mut self.vel[i]);
         }
+    }
+
+    fn update(&mut self) {
+        let positions = &self.pos;
+        // for i in 0..NO_PARTICLES {
+        //     self.density[i] = 0.0;
+        //
+        //     for j in 0..NO_PARTICLES {
+        //         self.density[i] += calculate_density(self.pos[i], self.pos[j]);
+        //     }
+        //
+        //     self.pressure[i] = calculate_pressure(self.density[i]);
+        // }
+        self.density
+            .par_iter_mut()
+            .enumerate()
+            .zip(self.pressure.par_iter_mut())
+            .for_each(|((i, density_ref), pressure_ref)| {
+                let mut current_density: f32 = 0.0;
+
+                for j in 0..NO_PARTICLES {
+                    current_density += calculate_density(self.pos[i], self.pos[j]);
+                }
+                *density_ref = current_density;
+                *pressure_ref = calculate_pressure(*density_ref);
+            });
+        let pressures = &self.pressure;
+        let densities = &self.density;
+
+        // We iterate over the forces mutably.
+        // `enumerate()` gives us `i` to identify the current particle.
+        // `force_ref` is the specific mutable reference to self.force[i].
+        self.force
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(i, force_ref)| {
+                // We use a local variable to accumulate force to avoid locking/contention
+                let mut current_force = Vec2::ZERO;
+
+                for j in 0..NO_PARTICLES {
+                    if i == j {
+                        continue;
+                    }
+
+                    let pressure_force = calculate_pressure_force(
+                        positions[i],
+                        positions[j],
+                        pressures[i],
+                        pressures[j],
+                        densities[j],
+                    );
+
+                    current_force -= pressure_force;
+                }
+
+                let gravity_force = calculate_gravity_force(densities[i]);
+                current_force += gravity_force;
+
+                // Finally, write the result to the mutable reference
+                *force_ref = current_force;
+            });
     }
 
     fn draw(&self) {
@@ -169,10 +193,9 @@ impl Particles {
 
         for i in 0..self.pos.len() {
             let pixel_pos = self.pos[i] * SCALE;
-            println!("{}", self.vel[i]);
 
             let speed = self.vel[i].length();
-            let t = (speed / MAX_VEL).clamp(0.0, 1.0);
+            let t = speed / MAX_VEL;
 
             let [r, g, b, a] = gradient.at(t).to_rgba8();
             let color = Color::from_rgba(r, g, b, a);
@@ -185,8 +208,8 @@ impl Particles {
 fn conf() -> Conf {
     Conf {
         window_title: "fluidsim".to_owned(),
-        window_height: 600,
-        window_width: 600,
+        window_height: 1000,
+        window_width: 1000,
         ..Default::default()
     }
 }
@@ -195,49 +218,50 @@ fn conf() -> Conf {
 async fn main() {
     let mut simulation = Particles::new();
 
-    // let cols = 20;
-    // let rows = 20;
-    // let spacing = 0.1; // 10cm spacing
-    //
-    // let grid_width = cols as f32 * spacing;
-    // let grid_height = rows as f32 * spacing;
+    let cols = 35;
+    let rows = 20;
+    let spacing = 0.1; // 10cm spacing
+
+    let grid_width = cols as f32 * spacing;
+    let grid_height = rows as f32 * spacing;
     //
     let world_width = screen_width() / SCALE;
     let world_height = screen_height() / SCALE;
     //
-    // let offset_x = (world_width - grid_width) / 2.0;
-    // let offset_y = (world_height - grid_height) / 2.0;
-    //
-    // for y in 0..rows {
-    //     for x in 0..cols {
-    //         simulation.spawn(Particle {
-    //             pos: vec2(offset_x + x as f32 * spacing, offset_y + y as f32 * spacing),
-    //             vel: vec2(0.0, 0.0),
-    //             density: REST_DENSITY,
-    //             pressure: 0.0,
-    //             force: vec2(0.0, 0.0),
-    //         });
-    //     }
-    // }
+    let offset_x = (world_width - grid_width) / 2.0;
+    let offset_y = (world_height - grid_height) / 2.0;
 
-    for _ in 0..NO_PARTICLES {
-        simulation.spawn(Particle {
-            pos: vec2(
-                rand::gen_range(0.0, world_width),
-                rand::gen_range(0.0, world_height),
-            ),
-            vel: vec2(0.0, 0.0),
-            density: REST_DENSITY,
-            pressure: 0.0,
-            force: vec2(0.0, 0.0),
-        });
+    for y in 0..rows {
+        for x in 0..cols {
+            simulation.spawn(Particle {
+                pos: vec2(offset_x + x as f32 * spacing, offset_y + y as f32 * spacing),
+                vel: vec2(0.0, 0.0),
+                density: REST_DENSITY,
+                pressure: 0.0,
+                force: vec2(0.0, 0.0),
+            });
+        }
     }
+
+    // for _ in 0..NO_PARTICLES {
+    //     simulation.spawn(Particle {
+    //         pos: vec2(
+    //             rand::gen_range(0.0, world_width),
+    //             rand::gen_range(0.0, world_height),
+    //         ),
+    //         vel: vec2(0.0, 0.0),
+    //         density: REST_DENSITY,
+    //         pressure: 0.0,
+    //         force: vec2(0.0, 0.0),
+    //     });
+    // }
     loop {
         let dt = 0.002;
 
         clear_background(BLACK);
 
-        simulation.update(dt);
+        simulation.update();
+        simulation.integrate(dt);
         simulation.draw();
 
         draw_text(&format!("FPS: {}", get_fps()), 10.0, 20.0, 30.0, WHITE);
