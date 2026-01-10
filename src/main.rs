@@ -91,53 +91,46 @@ impl Particles {
     }
 
     fn update(&mut self, dt: f32) {
-        for substep in 0..SUBSTEPS {
-            for i in 0..NO_PARTICLES {
-                self.density[i] = 0.0;
-                self.pressure[i] = 0.0;
-                self.force[i] = Vec2::ZERO;
+        for i in 0..NO_PARTICLES {
+            self.density[i] = 0.0;
+            self.pressure[i] = 0.0;
+            self.force[i] = Vec2::ZERO;
 
-                for j in 0..NO_PARTICLES {
-                    self.density[i] += calculate_density(self.pos[i], self.pos[j]);
+            for j in 0..NO_PARTICLES {
+                self.density[i] += calculate_density(self.pos[i], self.pos[j]);
+            }
+
+            self.pressure[i] = calculate_pressure(self.density[i]);
+        }
+        let pos = &mut self.pos;
+        let pressure = &self.pressure;
+        let density = &self.density;
+        let force = &mut self.force; // We need to write to this
+        let vel = &mut self.vel;
+        (0..NO_PARTICLES).for_each(|i| {
+            (0..NO_PARTICLES).for_each(|j| {
+                if i == j {
+                    return;
                 }
 
-                self.pressure[i] = calculate_pressure(self.density[i]);
-            }
-            let pos = &mut self.pos;
-            let pressure = &self.pressure;
-            let density = &self.density;
-            let force = &mut self.force; // We need to write to this
-            let vel = &mut self.vel;
-            (0..NO_PARTICLES).for_each(|i| {
-                (0..NO_PARTICLES).for_each(|j| {
-                    if i == j {
-                        return;
-                    }
+                let pressure_force =
+                    calculate_pressure_force(pos[i], pos[j], pressure[i], pressure[j], density[j]);
 
-                    let pressure_force = calculate_pressure_force(
-                        pos[i],
-                        pos[j],
-                        pressure[i],
-                        pressure[j],
-                        density[j],
-                    );
-
-                    force[i] -= pressure_force;
-                });
-
-                let gravity_force = calculate_gravity_force(density[i]);
-                force[i] += gravity_force;
-
-                let acceleration = force[i] / density[i];
-
-                vel[i] += acceleration * dt;
-                let mouse_vel = Self::mouse_action(&pos[i]);
-                vel[i] += mouse_vel;
-
-                pos[i] += vel[i] * dt;
-                Self::boundaries(&mut pos[i], &mut vel[i]);
+                force[i] -= pressure_force;
             });
-        }
+
+            let gravity_force = calculate_gravity_force(density[i]);
+            force[i] += gravity_force;
+
+            let acceleration = force[i] / density[i];
+
+            vel[i] += acceleration * dt;
+            let mouse_vel = Self::mouse_action(&pos[i]);
+            vel[i] += mouse_vel;
+
+            pos[i] += vel[i] * dt;
+            Self::boundaries(&mut pos[i], &mut vel[i]);
+        });
     }
 
     fn draw(&self) {
@@ -214,7 +207,7 @@ async fn main() {
         });
     }
     loop {
-        let dt = 0.030;
+        let dt = 0.002;
 
         clear_background(BLACK);
 
