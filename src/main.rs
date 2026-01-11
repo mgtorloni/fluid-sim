@@ -1,215 +1,16 @@
 mod constants;
 mod engine;
 
-use crate::constants::*;
-use colorgrad::{Gradient, GradientBuilder, LinearGradient};
-use engine::physics::{
-    calculate_density, calculate_gravity_force, calculate_pressure, calculate_pressure_force,
-};
+use crate::constants::{MOUSE_FORCE_STRENGTH, REST_DENSITY, SCALE};
+use crate::engine::renderer::FluidRenderer;
+use crate::engine::simulation::{Particle, Particles};
 use macroquad::prelude::*;
-use rayon::prelude::*;
-
-type ParticleVector = Vec2;
-type ParticleScalar = f32;
-
-struct Particle {
-    pos: ParticleVector,
-    vel: ParticleVector,
-    density: ParticleScalar,
-    pressure: ParticleScalar,
-    force: ParticleVector,
-}
-
-struct Particles {
-    pos: Vec<ParticleVector>,
-    vel: Vec<ParticleVector>,
-    density: Vec<ParticleScalar>,
-    pressure: Vec<ParticleScalar>,
-    force: Vec<ParticleVector>,
-}
-
-impl Particles {
-    fn new() -> Self {
-        Self {
-            pos: Vec::new(),
-            vel: Vec::new(),
-            density: Vec::new(),
-            pressure: Vec::new(),
-            force: Vec::new(),
-        }
-    }
-
-    fn spawn(&mut self, particle: Particle) {
-        self.pos.push(particle.pos);
-        self.vel.push(particle.vel);
-        self.density.push(particle.density);
-        self.pressure.push(particle.pressure);
-        self.force.push(particle.force);
-    }
-
-    fn boundaries(pos: &mut Vec2, vel: &mut Vec2) {
-        let world_width = screen_width() / SCALE;
-        let world_height = screen_height() / SCALE;
-
-        let particle_radius_m = RADIUS / SCALE;
-
-        if pos.x >= world_width - particle_radius_m {
-            // if vel.x <= 0.5 {
-            //     vel.y = 0.0;
-            // }
-            vel.x = -vel.x * DAMPING;
-            pos.x = world_width - particle_radius_m;
-        } else if pos.x <= particle_radius_m {
-            // if vel.x <= 0.5 {
-            //     vel.y = 0.0;
-            // }
-            vel.x = -vel.x * DAMPING;
-            pos.x = particle_radius_m;
-        }
-
-        if pos.y >= world_height - particle_radius_m {
-            // if vel.y <= 0.5 {
-            //     vel.x = 0.0;
-            // }
-            vel.y = -vel.y * DAMPING;
-            pos.y = world_height - particle_radius_m;
-        } else if pos.y <= particle_radius_m {
-            // if vel.y <= 0.5 {
-            //     vel.x = 0.0;
-            // }
-            vel.y = -vel.y * DAMPING;
-            pos.y = particle_radius_m;
-        }
-    }
-
-    fn mouse_action(pos: Vec2) -> Vec2 {
-        let (mx, my) = mouse_position();
-        let mouse_pos = vec2(mx / SCALE, my / SCALE);
-        let is_pushing = is_mouse_button_down(MouseButton::Left);
-
-        if is_pushing {
-            let delta = pos - mouse_pos;
-            let dist = delta.length();
-
-            if dist < MOUSE_INFLUENCE_RADIUS && dist > 0.0001 {
-                let dir = delta / dist;
-                // stronger in the center 0 at the edge
-                let strength = MOUSE_FORCE_STRENGTH * (1.0 - dist / MOUSE_INFLUENCE_RADIUS);
-                return dir * strength;
-            } else {
-                return Vec2::ZERO;
-            }
-        }
-        Vec2::ZERO
-    }
-    fn integrate(&mut self, dt: f32) {
-        for i in 0..NO_PARTICLES {
-            let acceleration = self.force[i] / self.density[i];
-
-            self.vel[i] += acceleration * dt;
-
-            let mouse_vel = Self::mouse_action(self.pos[i]);
-            self.vel[i] += mouse_vel;
-
-            if self.vel[i].length_squared() > MAX_VEL * MAX_VEL {
-                self.vel[i] = (self.vel[i] / self.vel[i].length()) * MAX_VEL;
-            }
-
-            self.pos[i] += self.vel[i] * dt;
-
-            Self::boundaries(&mut self.pos[i], &mut self.vel[i]);
-        }
-    }
-
-    fn update(&mut self) {
-        let positions = &self.pos;
-        // for i in 0..NO_PARTICLES {
-        //     self.density[i] = 0.0;
-        //
-        //     for j in 0..NO_PARTICLES {
-        //         self.density[i] += calculate_density(self.pos[i], self.pos[j]);
-        //     }
-        //
-        //     self.pressure[i] = calculate_pressure(self.density[i]);
-        // }
-        self.density
-            .par_iter_mut()
-            .enumerate()
-            .zip(self.pressure.par_iter_mut())
-            .for_each(|((i, density_ref), pressure_ref)| {
-                let mut current_density: f32 = 0.0;
-
-                for j in 0..NO_PARTICLES {
-                    current_density += calculate_density(self.pos[i], self.pos[j]);
-                }
-                *density_ref = current_density;
-                *pressure_ref = calculate_pressure(*density_ref);
-            });
-        let pressures = &self.pressure;
-        let densities = &self.density;
-
-        // We iterate over the forces mutably.
-        // `enumerate()` gives us `i` to identify the current particle.
-        // `force_ref` is the specific mutable reference to self.force[i].
-        self.force
-            .par_iter_mut()
-            .enumerate()
-            .for_each(|(i, force_ref)| {
-                // We use a local variable to accumulate force to avoid locking/contention
-                let mut current_force = Vec2::ZERO;
-
-                for j in 0..NO_PARTICLES {
-                    if i == j {
-                        continue;
-                    }
-
-                    let pressure_force = calculate_pressure_force(
-                        positions[i],
-                        positions[j],
-                        pressures[i],
-                        pressures[j],
-                        densities[j],
-                    );
-
-                    current_force -= pressure_force;
-                }
-
-                let gravity_force = calculate_gravity_force(densities[i]);
-                current_force += gravity_force;
-
-                // Finally, write the result to the mutable reference
-                *force_ref = current_force;
-            });
-    }
-
-    fn draw(&self) {
-        let gradient = GradientBuilder::new()
-            .colors(&[
-                colorgrad::Color::from_rgba8(50, 100, 255, 255),
-                colorgrad::Color::from_rgba8(255, 150, 150, 255),
-            ])
-            .build::<LinearGradient>()
-            .expect("Failed to build gradient");
-
-        for i in 0..self.pos.len() {
-            let pixel_pos = self.pos[i] * SCALE;
-
-            let speed = self.vel[i].length();
-            let t = speed / MAX_VEL;
-
-            let [r, g, b, a] = gradient.at(t).to_rgba8();
-            let color = Color::from_rgba(r, g, b, a);
-
-            draw_circle(pixel_pos.x, pixel_pos.y, RADIUS, color);
-        }
-    }
-}
 
 fn conf() -> Conf {
     Conf {
         window_title: "fluidsim".to_owned(),
-        window_height: 1000,
-        window_width: 1000,
+        window_height: 700,
+        window_width: 700,
         ..Default::default()
     }
 }
@@ -217,19 +18,19 @@ fn conf() -> Conf {
 #[macroquad::main(conf)]
 async fn main() {
     let mut simulation = Particles::new();
+    let renderer = FluidRenderer::new();
 
-    let cols = 35;
-    let rows = 20;
+    let cols = 20;
+    let rows = 40;
     let spacing = 0.1; // 10cm spacing
 
     let grid_width = cols as f32 * spacing;
     let grid_height = rows as f32 * spacing;
     //
-    let world_width = screen_width() / SCALE;
-    let world_height = screen_height() / SCALE;
+    let world_size = vec2(screen_width() / SCALE, screen_height() / SCALE);
     //
-    let offset_x = (world_width - grid_width) / 2.0;
-    let offset_y = (world_height - grid_height) / 2.0;
+    let offset_x = (world_size.x - grid_width) / 2.0;
+    let offset_y = (world_size.y - grid_height) / 2.0;
 
     for y in 0..rows {
         for x in 0..cols {
@@ -246,8 +47,8 @@ async fn main() {
     // for _ in 0..NO_PARTICLES {
     //     simulation.spawn(Particle {
     //         pos: vec2(
-    //             rand::gen_range(0.0, world_width),
-    //             rand::gen_range(0.0, world_height),
+    //             rand::gen_range(0.0, world_size.x),
+    //             rand::gen_range(0.0, world_size.y),
     //         ),
     //         vel: vec2(0.0, 0.0),
     //         density: REST_DENSITY,
@@ -255,14 +56,42 @@ async fn main() {
     //         force: vec2(0.0, 0.0),
     //     });
     // }
+    const PHYSICS_DT: f32 = 0.002;
+    let mut accumulator = 0.0;
+
+    let mut previous_time = get_time();
+
     loop {
-        let dt = 0.002;
+        let current_time = get_time();
+        let frame_time = current_time - previous_time;
+        previous_time = current_time;
+
+        accumulator += frame_time.min(0.002) as f32;
+        let (mx, my) = mouse_position();
+        let mouse_world_pos = vec2(mx / SCALE, my / SCALE);
+
+        //TODO: Put this in an enum?
+        let interaction_strength = if is_mouse_button_down(MouseButton::Left) {
+            MOUSE_FORCE_STRENGTH
+        } else if is_mouse_button_down(MouseButton::Right) {
+            -MOUSE_FORCE_STRENGTH
+        } else {
+            0.0
+        };
+
+        while accumulator >= PHYSICS_DT {
+            simulation.update();
+            simulation.integrate(
+                world_size,
+                mouse_world_pos,
+                interaction_strength,
+                PHYSICS_DT,
+            );
+            accumulator -= PHYSICS_DT;
+        }
 
         clear_background(BLACK);
-
-        simulation.update();
-        simulation.integrate(dt);
-        simulation.draw();
+        renderer.draw(&simulation);
 
         draw_text(&format!("FPS: {}", get_fps()), 10.0, 20.0, 30.0, WHITE);
 

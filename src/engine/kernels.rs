@@ -1,7 +1,7 @@
 use crate::constants::INFLUENCE_RADIUS;
+use crate::glam::Vec2;
 use crate::rand;
 use crate::vec2;
-use macroquad::prelude::Vec2;
 use std::f32::consts::PI;
 
 pub fn spiky_kernel_gradient(pos: Vec2, pos_other: Vec2) -> Vec2 {
