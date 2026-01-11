@@ -1,7 +1,7 @@
 mod constants;
 mod engine;
 
-use crate::constants::{MOUSE_FORCE_STRENGTH, REST_DENSITY, SCALE};
+use crate::constants::{MOUSE_FORCE_STRENGTH, NO_PARTICLES, REST_DENSITY, SCALE};
 use crate::engine::renderer::FluidRenderer;
 use crate::engine::simulation::{Particle, Particles};
 use macroquad::prelude::*;
@@ -20,8 +20,9 @@ async fn main() {
     let mut simulation = Particles::new();
     let renderer = FluidRenderer::new();
 
-    let cols = 20;
-    let rows = 40;
+    let cols = (NO_PARTICLES as f32).sqrt().ceil() as usize;
+    let rows = NO_PARTICLES.div_ceil(cols);
+    println!("{},{}", cols, rows);
     let spacing = 0.1; // 10cm spacing
 
     let grid_width = cols as f32 * spacing;
@@ -32,8 +33,12 @@ async fn main() {
     let offset_x = (world_size.x - grid_width) / 2.0;
     let offset_y = (world_size.y - grid_height) / 2.0;
 
+    let mut count = 0;
     for y in 0..rows {
         for x in 0..cols {
+            if count >= NO_PARTICLES {
+                break;
+            }
             simulation.spawn(Particle {
                 pos: vec2(offset_x + x as f32 * spacing, offset_y + y as f32 * spacing),
                 vel: vec2(0.0, 0.0),
@@ -41,6 +46,7 @@ async fn main() {
                 pressure: 0.0,
                 force: vec2(0.0, 0.0),
             });
+            count += 1;
         }
     }
 
@@ -70,7 +76,7 @@ async fn main() {
         let (mx, my) = mouse_position();
         let mouse_world_pos = vec2(mx / SCALE, my / SCALE);
 
-        //TODO: Put this in an enum?
+        //TODO: Put this in an enum to make it more readable?
         let interaction_strength = if is_mouse_button_down(MouseButton::Left) {
             MOUSE_FORCE_STRENGTH
         } else if is_mouse_button_down(MouseButton::Right) {
