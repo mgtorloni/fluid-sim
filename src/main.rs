@@ -1,9 +1,10 @@
 mod constants;
 mod engine;
+mod graphics;
 
 use crate::constants::{MOUSE_FORCE_STRENGTH, NO_PARTICLES, REST_DENSITY, SCALE};
-use crate::engine::renderer::FluidRenderer;
 use crate::engine::simulation::{Particle, Particles};
+use crate::graphics::renderer::FluidRenderer;
 use macroquad::prelude::*;
 
 fn conf() -> Conf {

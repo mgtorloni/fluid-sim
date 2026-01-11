@@ -1,5 +1,5 @@
-use super::simulation::Particles;
 use crate::constants::*;
+use crate::engine::simulation::Particles;
 use colorgrad::{Gradient, GradientBuilder, LinearGradient};
 use macroquad::prelude::*;
 
