@@ -9,6 +9,13 @@ pub type ParticleVector = Vec2;
 pub type ParticleScalar = f32;
 
 #[derive(Clone, Copy)]
+pub enum IOInteraction {
+    None,
+    Repel(f32),
+    Attract(f32),
+}
+
+#[derive(Clone, Copy)]
 pub struct Particle {
     pub pos: ParticleVector,
     pub vel: ParticleVector,
@@ -23,6 +30,38 @@ pub struct Particles {
     pub density: Vec<ParticleScalar>,
     pub pressure: Vec<ParticleScalar>,
     pub force: Vec<ParticleVector>,
+}
+
+impl IOInteraction {
+    pub fn delta_vel(&self, particle_pos: Vec2, io_pos: Vec2) -> Vec2 {
+        match self {
+            IOInteraction::None => Vec2::ZERO,
+            IOInteraction::Repel(strength) => {
+                let delta = particle_pos - io_pos; // points away from IO
+                let dist = delta.length();
+
+                if dist < MOUSE_INFLUENCE_RADIUS && dist > 0.0001 {
+                    let dir = delta / dist;
+                    let factor = 1.0 - dist / MOUSE_INFLUENCE_RADIUS;
+                    dir * (*strength) * factor
+                } else {
+                    Vec2::ZERO
+                }
+            }
+            IOInteraction::Attract(strength) => {
+                let delta = io_pos - particle_pos; // points toward IO
+                let dist = delta.length();
+
+                if dist < MOUSE_INFLUENCE_RADIUS && dist > 0.0001 {
+                    let dir = delta / dist;
+                    let factor = dist / MOUSE_INFLUENCE_RADIUS;
+                    dir * (*strength) * factor
+                } else {
+                    Vec2::ZERO
+                }
+            }
+        }
+    }
 }
 
 impl Particles {
@@ -72,40 +111,11 @@ impl Particles {
         }
     }
 
-    fn mouse_action(pos: Vec2, mouse_pos: Vec2, interaction_strength: f32) -> Vec2 {
-        if interaction_strength != 0.0 {
-            let delta = {
-                if interaction_strength > 0.0 {
-                    pos - mouse_pos
-                } else {
-                    mouse_pos - pos
-                }
-            };
-            let dist = delta.length();
-
-            if dist < MOUSE_INFLUENCE_RADIUS && dist > 0.0001 {
-                let dir = delta / dist;
-                let factor = if interaction_strength > 0.0 {
-                    // stronger in the center 0 at the edge
-                    1.0 - dist / MOUSE_INFLUENCE_RADIUS
-                } else {
-                    // stronger in the ed
-                    dist / MOUSE_INFLUENCE_RADIUS
-                };
-
-                return dir * interaction_strength.abs() * factor;
-            } else {
-                return Vec2::ZERO;
-            }
-        }
-        Vec2::ZERO
-    }
-
     pub fn integrate(
         &mut self,
         world_size: Vec2,
         mouse_pos: Vec2,
-        interaction_strength: f32,
+        interaction: IOInteraction,
         dt: f32,
     ) {
         for i in 0..NO_PARTICLES {
@@ -113,8 +123,8 @@ impl Particles {
 
             self.vel[i] += acceleration * dt;
 
-            let mouse_vel = Self::mouse_action(self.pos[i], mouse_pos, interaction_strength);
-            self.vel[i] += mouse_vel;
+            let interaction_vel = interaction.delta_vel(self.pos[i], mouse_pos);
+            self.vel[i] += interaction_vel;
 
             if self.vel[i].length_squared() > MAX_VEL * MAX_VEL {
                 self.vel[i] = (self.vel[i] / self.vel[i].length()) * MAX_VEL;

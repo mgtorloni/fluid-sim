@@ -3,7 +3,7 @@ mod engine;
 mod graphics;
 
 use crate::constants::{MOUSE_FORCE_STRENGTH, NO_PARTICLES, REST_DENSITY, SCALE};
-use crate::engine::simulation::{Particle, Particles};
+use crate::engine::simulation::{IOInteraction, Particle, Particles};
 use crate::graphics::renderer::FluidRenderer;
 use macroquad::prelude::*;
 
@@ -28,9 +28,9 @@ async fn main() {
 
     let grid_width = cols as f32 * spacing;
     let grid_height = rows as f32 * spacing;
-    //
+
     let world_size = vec2(screen_width() / SCALE, screen_height() / SCALE);
-    //
+
     let offset_x = (world_size.x - grid_width) / 2.0;
     let offset_y = (world_size.y - grid_height) / 2.0;
 
@@ -77,13 +77,12 @@ async fn main() {
         let (mx, my) = mouse_position();
         let mouse_world_pos = vec2(mx / SCALE, my / SCALE);
 
-        //TODO: Put this in an enum to make it more readable?
         let interaction_strength = if is_mouse_button_down(MouseButton::Left) {
-            MOUSE_FORCE_STRENGTH
+            IOInteraction::Repel(MOUSE_FORCE_STRENGTH)
         } else if is_mouse_button_down(MouseButton::Right) {
-            -MOUSE_FORCE_STRENGTH
+            IOInteraction::Attract(MOUSE_FORCE_STRENGTH)
         } else {
-            0.0
+            IOInteraction::None
         };
 
         while accumulator >= PHYSICS_DT {
