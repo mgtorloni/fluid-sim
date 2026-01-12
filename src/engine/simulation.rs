@@ -18,6 +18,7 @@ pub enum IOInteraction {
 #[derive(Clone, Copy)]
 pub struct Particle {
     pub pos: ParticleVector,
+    pub predicted_pos: ParticleVector,
     pub vel: ParticleVector,
     pub density: ParticleScalar,
     pub pressure: ParticleScalar,
@@ -26,6 +27,7 @@ pub struct Particle {
 
 pub struct Particles {
     pub pos: Vec<ParticleVector>,
+    pub predicted_pos: Vec<ParticleVector>,
     pub vel: Vec<ParticleVector>,
     pub density: Vec<ParticleScalar>,
     pub pressure: Vec<ParticleScalar>,
@@ -68,6 +70,7 @@ impl Particles {
     pub fn new() -> Self {
         Self {
             pos: Vec::new(),
+            predicted_pos: Vec::new(),
             vel: Vec::new(),
             density: Vec::new(),
             pressure: Vec::new(),
@@ -77,6 +80,7 @@ impl Particles {
 
     pub fn spawn(&mut self, particle: Particle) {
         self.pos.push(particle.pos);
+        self.predicted_pos.push(particle.predicted_pos);
         self.vel.push(particle.vel);
         self.density.push(particle.density);
         self.pressure.push(particle.pressure);
@@ -86,8 +90,6 @@ impl Particles {
     pub fn boundaries(world_size: Vec2, pos: &mut Vec2, vel: &mut Vec2) {
         let world_width = world_size.x;
         let world_height = world_size.y;
-        // let world_width = screen_width() / SCALE;
-        // let world_height = screen_height() / SCALE;
 
         let particle_radius_m = RADIUS / SCALE;
 
@@ -136,8 +138,11 @@ impl Particles {
         }
     }
 
-    pub fn update(&mut self) {
-        let positions = &self.pos;
+    pub fn update(&mut self, dt: f32) {
+        for i in 0..self.pos.len() {
+            self.predicted_pos[i] = self.pos[i] + self.vel[i] * dt;
+        }
+        let predicted_pos = &self.predicted_pos;
         self.density
             .par_iter_mut()
             .enumerate()
@@ -146,7 +151,8 @@ impl Particles {
                 let mut current_density: f32 = 0.0;
 
                 for j in 0..NO_PARTICLES {
-                    current_density += calculate_density(self.pos[i], self.pos[j]);
+                    current_density +=
+                        calculate_density(self.predicted_pos[i], self.predicted_pos[j]);
                 }
                 *density_ref = current_density;
                 *pressure_ref = calculate_pressure(*density_ref);
@@ -166,8 +172,8 @@ impl Particles {
                     }
 
                     let pressure_force = calculate_pressure_force(
-                        positions[i],
-                        positions[j],
+                        predicted_pos[i],
+                        predicted_pos[j],
                         pressures[i],
                         pressures[j],
                         densities[j],

@@ -42,6 +42,7 @@ async fn main() {
             }
             simulation.spawn(Particle {
                 pos: vec2(offset_x + x as f32 * spacing, offset_y + y as f32 * spacing),
+                predicted_pos: vec2(offset_x + x as f32 * spacing, offset_y + y as f32 * spacing),
                 vel: vec2(0.0, 0.0),
                 density: REST_DENSITY,
                 pressure: 0.0,
@@ -86,7 +87,7 @@ async fn main() {
         };
 
         while accumulator >= PHYSICS_DT {
-            simulation.update();
+            simulation.update(PHYSICS_DT);
             simulation.integrate(
                 world_size,
                 mouse_world_pos,
