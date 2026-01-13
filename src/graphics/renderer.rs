@@ -17,7 +17,7 @@ impl FluidRenderer {
                 colorgrad::Color::from_rgba8(255, 160, 60, 255),
                 colorgrad::Color::from_rgba8(255, 0, 0, 255),
             ])
-            .domain(&[0.0, 0.25, 0.5, 0.75, 0.90])
+            .domain(&[0.0, 0.25, 0.5, 0.75, 0.80])
             .build::<LinearGradient>()
             .expect("Failed to build gradient");
         Self { gradient }
