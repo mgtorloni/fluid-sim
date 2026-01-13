@@ -11,7 +11,7 @@ fn conf() -> Conf {
     Conf {
         window_title: "fluidsim".to_owned(),
         window_height: 700,
-        window_width: 700,
+        window_width: 1000,
         ..Default::default()
     }
 }
@@ -65,16 +65,17 @@ async fn main() {
     //     });
     // }
     const PHYSICS_DT: f32 = 0.002;
-    let mut accumulator = 0.0;
-
-    let mut previous_time = get_time();
+    // let mut accumulator = 0.0;
+    //
+    // let mut previous_time = get_time();
 
     loop {
-        let current_time = get_time();
-        let frame_time = current_time - previous_time;
-        previous_time = current_time;
+        // let current_time = get_time();
+        // let frame_time = current_time - previous_time;
+        // previous_time = current_time;
 
-        accumulator += frame_time.min(0.002) as f32;
+        // accumulator += frame_time.min(0.002) as f32;
+        let world_size = vec2(screen_width() / SCALE, screen_height() / SCALE);
         let (mx, my) = mouse_position();
         let mouse_world_pos = vec2(mx / SCALE, my / SCALE);
 
@@ -86,18 +87,25 @@ async fn main() {
             IOInteraction::None
         };
 
-        while accumulator >= PHYSICS_DT {
-            simulation.update(PHYSICS_DT);
-            simulation.integrate(
-                world_size,
-                mouse_world_pos,
-                interaction_strength,
-                PHYSICS_DT,
-            );
-            accumulator -= PHYSICS_DT;
-        }
+        // while accumulator >= PHYSICS_DT {
+        //     simulation.update(PHYSICS_DT);
+        //     simulation.integrate(
+        //         world_size,
+        //         mouse_world_pos,
+        //         interaction_strength,
+        //         PHYSICS_DT,
+        //     );
+        //     accumulator -= PHYSICS_DT;
+        // }
 
         clear_background(BLACK);
+        simulation.update(PHYSICS_DT);
+        simulation.integrate(
+            world_size,
+            mouse_world_pos,
+            interaction_strength,
+            PHYSICS_DT,
+        );
         renderer.draw(&simulation);
 
         draw_text(&format!("FPS: {}", get_fps()), 10.0, 20.0, 30.0, WHITE);
