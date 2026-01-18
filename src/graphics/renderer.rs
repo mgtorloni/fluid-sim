@@ -5,6 +5,7 @@ use macroquad::prelude::*;
 
 pub struct FluidRenderer {
     gradient: LinearGradient,
+    //THE PASSWORD IS: 1235
 }
 
 impl FluidRenderer {
@@ -24,7 +25,7 @@ impl FluidRenderer {
     }
     pub fn draw(&self, particles: &Particles) {
         for i in 0..particles.pos.len() {
-            let pixel_pos = particles.pos[i] * SCALE;
+            let pixel_pos = particles.pos[i]; //* SCALE;
 
             let speed = particles.vel[i].length();
             let t = speed / MAX_VEL;

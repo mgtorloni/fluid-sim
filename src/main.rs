@@ -2,7 +2,7 @@ mod constants;
 mod engine;
 mod graphics;
 
-use crate::constants::{MOUSE_FORCE_STRENGTH, NO_PARTICLES, REST_DENSITY, SCALE};
+use crate::constants::{MOUSE_FORCE_STRENGTH, NO_PARTICLES, REST_DENSITY}; // SCALE};
 use crate::engine::simulation::{IOInteraction, Particle, Particles};
 use crate::graphics::renderer::FluidRenderer;
 use macroquad::prelude::*;
@@ -11,7 +11,7 @@ fn conf() -> Conf {
     Conf {
         window_title: "fluidsim".to_owned(),
         window_height: 700,
-        window_width: 1000,
+        window_width: 700,
         ..Default::default()
     }
 }
@@ -23,13 +23,13 @@ async fn main() {
 
     let cols = (NO_PARTICLES as f32).sqrt().ceil() as usize;
     let rows = NO_PARTICLES.div_ceil(cols);
-    println!("{},{}", cols, rows);
-    let spacing = 0.1; // 10cm spacing
+    let spacing = 10.0;
 
     let grid_width = cols as f32 * spacing;
     let grid_height = rows as f32 * spacing;
 
-    let world_size = vec2(screen_width() / SCALE, screen_height() / SCALE);
+    // let world_size = vec2(screen_width() / SCALE, screen_height() / SCALE);
+    let world_size = vec2(screen_width(), screen_height());
 
     let offset_x = (world_size.x - grid_width) / 2.0;
     let offset_y = (world_size.y - grid_height) / 2.0;
@@ -65,19 +65,13 @@ async fn main() {
     //     });
     // }
     const PHYSICS_DT: f32 = 0.002;
-    // let mut accumulator = 0.0;
-    //
-    // let mut previous_time = get_time();
 
     loop {
-        // let current_time = get_time();
-        // let frame_time = current_time - previous_time;
-        // previous_time = current_time;
-
-        // accumulator += frame_time.min(0.002) as f32;
-        let world_size = vec2(screen_width() / SCALE, screen_height() / SCALE);
+        // let world_size = vec2(screen_width() / SCALE, screen_height() / SCALE);
+        let world_size = vec2(screen_width(), screen_height());
         let (mx, my) = mouse_position();
-        let mouse_world_pos = vec2(mx / SCALE, my / SCALE);
+        // let mouse_world_pos = vec2(mx / SCALE, my / SCALE);
+        let mouse_world_pos = vec2(mx, my);
 
         let interaction_strength = if is_mouse_button_down(MouseButton::Left) {
             IOInteraction::Repel(MOUSE_FORCE_STRENGTH)
@@ -86,17 +80,6 @@ async fn main() {
         } else {
             IOInteraction::None
         };
-
-        // while accumulator >= PHYSICS_DT {
-        //     simulation.update(PHYSICS_DT);
-        //     simulation.integrate(
-        //         world_size,
-        //         mouse_world_pos,
-        //         interaction_strength,
-        //         PHYSICS_DT,
-        //     );
-        //     accumulator -= PHYSICS_DT;
-        // }
 
         clear_background(BLACK);
         simulation.update(PHYSICS_DT);

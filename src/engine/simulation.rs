@@ -91,7 +91,7 @@ impl Particles {
         let world_width = world_size.x;
         let world_height = world_size.y;
 
-        let particle_radius_m = RADIUS / SCALE;
+        let particle_radius_m = RADIUS; // / SCALE;
 
         if pos.x >= world_width - particle_radius_m {
             // if vel.y <= 0.5 {
@@ -142,7 +142,6 @@ impl Particles {
         for i in 0..self.pos.len() {
             self.predicted_pos[i] = self.pos[i] + self.vel[i] * dt;
         }
-        let predicted_pos = &self.predicted_pos;
         self.density
             .par_iter_mut()
             .enumerate()
@@ -157,6 +156,8 @@ impl Particles {
                 *density_ref = current_density;
                 *pressure_ref = calculate_pressure(*density_ref);
             });
+
+        let predicted_pos = &self.predicted_pos;
         let pressures = &self.pressure;
         let densities = &self.density;
 
@@ -165,6 +166,7 @@ impl Particles {
             .enumerate()
             .for_each(|(i, force_ref)| {
                 let mut current_force = Vec2::ZERO;
+                // println!("{}", densities[i]);
 
                 for j in 0..NO_PARTICLES {
                     if i == j {
