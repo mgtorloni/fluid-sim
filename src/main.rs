@@ -2,7 +2,7 @@ mod constants;
 mod engine;
 mod graphics;
 
-use crate::constants::{MOUSE_FORCE_STRENGTH, NO_PARTICLES, REST_DENSITY}; // SCALE};
+use crate::constants::{HEIGHT, MOUSE_FORCE_STRENGTH, NO_PARTICLES, REST_DENSITY, WIDTH}; // SCALE};
 use crate::engine::simulation::{IOInteraction, Particle, Particles};
 use crate::graphics::renderer::FluidRenderer;
 use macroquad::prelude::*;
@@ -10,8 +10,8 @@ use macroquad::prelude::*;
 fn conf() -> Conf {
     Conf {
         window_title: "fluidsim".to_owned(),
-        window_height: 700,
-        window_width: 700,
+        window_height: HEIGHT,
+        window_width: WIDTH,
         ..Default::default()
     }
 }
@@ -28,7 +28,6 @@ async fn main() {
     let grid_width = cols as f32 * spacing;
     let grid_height = rows as f32 * spacing;
 
-    // let world_size = vec2(screen_width() / SCALE, screen_height() / SCALE);
     let world_size = vec2(screen_width(), screen_height());
 
     let offset_x = (world_size.x - grid_width) / 2.0;
@@ -67,10 +66,8 @@ async fn main() {
     const PHYSICS_DT: f32 = 0.002;
 
     loop {
-        // let world_size = vec2(screen_width() / SCALE, screen_height() / SCALE);
         let world_size = vec2(screen_width(), screen_height());
         let (mx, my) = mouse_position();
-        // let mouse_world_pos = vec2(mx / SCALE, my / SCALE);
         let mouse_world_pos = vec2(mx, my);
 
         let interaction_strength = if is_mouse_button_down(MouseButton::Left) {
@@ -82,7 +79,7 @@ async fn main() {
         };
 
         clear_background(BLACK);
-        simulation.update(PHYSICS_DT);
+        simulation.update(PHYSICS_DT, world_size);
         simulation.integrate(
             world_size,
             mouse_world_pos,

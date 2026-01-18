@@ -2,8 +2,11 @@ use crate::constants::*;
 use crate::engine::physics::{
     calculate_density, calculate_gravity_force, calculate_pressure, calculate_pressure_force,
 };
-use crate::glam::Vec2;
+use crate::engine::search;
+use crate::glam::{IVec2, Vec2};
+use crate::uvec2;
 use rayon::prelude::*;
+use rdxsort::*;
 
 pub type ParticleVector = Vec2;
 pub type ParticleScalar = f32;
@@ -133,26 +136,72 @@ impl Particles {
             }
 
             self.pos[i] += self.vel[i] * dt;
-
             Self::boundaries(world_size, &mut self.pos[i], &mut self.vel[i]);
         }
     }
 
-    pub fn update(&mut self, dt: f32) {
+    pub fn update(&mut self, dt: f32, world_size: Vec2) {
+        let mut cells: Vec<(u32, usize)> = Vec::new(); //cell id, particle id
+        let grid_width = (world_size.x / CELL_SIZE).floor() as usize;
+        let grid_height = (world_size.y / CELL_SIZE).floor() as usize;
+        let total_cells = grid_width * grid_height;
+
         for i in 0..self.pos.len() {
             self.predicted_pos[i] = self.pos[i] + self.vel[i] * dt;
+            Self::boundaries(world_size, &mut self.predicted_pos[i], &mut self.vel[i]);
+            let grid_coord = search::grid_coord(self.predicted_pos[i]);
+            cells.push((search::hash(grid_coord, world_size), i));
         }
+        cells.sort_by_key(|k| k.0);
+
+        let mut lookups = vec![(0usize, 0usize); total_cells];
+
+        for (i, &(cell_id, _particle_id)) in cells.iter().enumerate() {
+            let data = &mut lookups[cell_id as usize];
+
+            if data.1 == 0 {
+                data.0 = i;
+            }
+
+            data.1 += 1;
+        }
+
         self.density
             .par_iter_mut()
             .enumerate()
             .zip(self.pressure.par_iter_mut())
             .for_each(|((i, density_ref), pressure_ref)| {
                 let mut current_density: f32 = 0.0;
+                let grid_coord = search::grid_coord(self.predicted_pos[i]);
+                let grid_neighbours = search::neighbours();
 
-                for j in 0..NO_PARTICLES {
-                    current_density +=
-                        calculate_density(self.predicted_pos[i], self.predicted_pos[j]);
+                for (offset_x, offset_y) in grid_neighbours {
+                    let neighbor_x = grid_coord.x as i32 + offset_x;
+                    let neighbor_y = grid_coord.y as i32 + offset_y;
+                    if neighbor_x >= 0
+                        && neighbor_x < grid_width as i32
+                        && neighbor_y >= 0
+                        && neighbor_y < grid_height as i32
+                    {
+                        let valid_coord = uvec2(neighbor_x as u32, neighbor_y as u32);
+                        let cell_key = search::hash(valid_coord, world_size);
+
+                        let (start_index, count) = lookups[cell_key as usize];
+
+                        for j in 0..count {
+                            let particle_idx = cells[start_index + j].1;
+
+                            current_density += calculate_density(
+                                self.predicted_pos[i],
+                                self.predicted_pos[particle_idx],
+                            );
+                        }
+                    }
                 }
+                // for j in 0..NO_PARTICLES {
+                //     current_density +=
+                //         calculate_density(self.predicted_pos[i], self.predicted_pos[j]);
+                // }
                 *density_ref = current_density;
                 *pressure_ref = calculate_pressure(*density_ref);
             });
@@ -167,22 +216,53 @@ impl Particles {
             .for_each(|(i, force_ref)| {
                 let mut current_force = Vec2::ZERO;
                 // println!("{}", densities[i]);
+                let grid_coord = search::grid_coord(self.predicted_pos[i]);
+                let grid_neighbours = search::neighbours();
+                for (offset_x, offset_y) in grid_neighbours {
+                    let neighbor_x = grid_coord.x as i32 + offset_x;
+                    let neighbor_y = grid_coord.y as i32 + offset_y;
+                    if neighbor_x >= 0
+                        && neighbor_x < grid_width as i32
+                        && neighbor_y >= 0
+                        && neighbor_y < grid_height as i32
+                    {
+                        let valid_coord = uvec2(neighbor_x as u32, neighbor_y as u32);
+                        let cell_key = search::hash(valid_coord, world_size);
 
-                for j in 0..NO_PARTICLES {
-                    if i == j {
-                        continue;
+                        let (start_index, count) = lookups[cell_key as usize];
+
+                        for j in 0..count {
+                            let particle_idx = cells[start_index + j].1;
+
+                            if i == particle_idx {
+                                continue;
+                            }
+                            let pressure_force = calculate_pressure_force(
+                                predicted_pos[i],
+                                predicted_pos[particle_idx],
+                                pressures[i],
+                                pressures[particle_idx],
+                                densities[particle_idx],
+                            );
+                            current_force -= pressure_force;
+                        }
                     }
-
-                    let pressure_force = calculate_pressure_force(
-                        predicted_pos[i],
-                        predicted_pos[j],
-                        pressures[i],
-                        pressures[j],
-                        densities[j],
-                    );
-
-                    current_force -= pressure_force;
                 }
+                // for j in 0..NO_PARTICLES {
+                //     if i == j {
+                //         continue;
+                //     }
+                //
+                //     let pressure_force = calculate_pressure_force(
+                //         predicted_pos[i],
+                //         predicted_pos[j],
+                //         pressures[i],
+                //         pressures[j],
+                //         densities[j],
+                //     );
+                //
+                //     current_force -= pressure_force;
+                // }
 
                 let gravity_force = calculate_gravity_force(densities[i]);
                 current_force += gravity_force;
