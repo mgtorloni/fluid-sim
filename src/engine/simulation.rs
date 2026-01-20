@@ -94,7 +94,7 @@ impl Particles {
         let world_width = world_size.x;
         let world_height = world_size.y;
 
-        let particle_radius_m = RADIUS; // / SCALE;
+        let particle_radius_m = RADIUS;
 
         if pos.x >= world_width - particle_radius_m {
             vel.x = -vel.x * DAMPING;

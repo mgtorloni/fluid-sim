@@ -2,9 +2,12 @@ mod constants;
 mod engine;
 mod graphics;
 
-use crate::constants::{HEIGHT, MOUSE_FORCE_STRENGTH, NO_PARTICLES, REST_DENSITY, WIDTH}; // SCALE};
+use crate::constants::SimulationParams;
+
+use crate::constants::{HEIGHT, NO_PARTICLES, REST_DENSITY, WIDTH}; // SCALE};
 use crate::engine::simulation::{IOInteraction, Particle, Particles};
 use crate::graphics::renderer::FluidRenderer;
+use egui_macroquad::egui;
 use macroquad::prelude::*;
 
 fn conf() -> Conf {
@@ -63,18 +66,24 @@ async fn main() {
     //         force: vec2(0.0, 0.0),
     //     });
     // }
-
+    let mut params = SimulationParams::default();
     loop {
         let dt = get_frame_time() / 10.0;
-        println!("{}", dt);
         let world_size = vec2(screen_width(), screen_height());
         let (mx, my) = mouse_position();
         let mouse_world_pos = vec2(mx, my);
+        egui_macroquad::ui(|egui_ctx| {
+            egui::Window::new("Settings").show(egui_ctx, |ui| {
+                params.ui(ui);
+            });
+        });
 
-        let interaction_strength = if is_mouse_button_down(MouseButton::Left) {
-            IOInteraction::Repel(MOUSE_FORCE_STRENGTH)
-        } else if is_mouse_button_down(MouseButton::Right) {
-            IOInteraction::Attract(MOUSE_FORCE_STRENGTH)
+        let mouse_captured = egui_macroquad::egui::Context::default().wants_pointer_input();
+
+        let interaction_strength = if !mouse_captured && is_mouse_button_down(MouseButton::Left) {
+            IOInteraction::Repel(params.mouse_force)
+        } else if !mouse_captured && is_mouse_button_down(MouseButton::Right) {
+            IOInteraction::Attract(params.mouse_force)
         } else {
             IOInteraction::None
         };
@@ -85,6 +94,7 @@ async fn main() {
         renderer.draw(&simulation);
 
         draw_text(&format!("FPS: {}", get_fps()), 10.0, 20.0, 30.0, WHITE);
+        egui_macroquad::draw();
 
         next_frame().await;
     }
