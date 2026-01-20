@@ -97,9 +97,6 @@ impl Particles {
         let particle_radius_m = RADIUS; // / SCALE;
 
         if pos.x >= world_width - particle_radius_m {
-            // if vel.y <= 0.5 {
-            //     vel.x = 0.0;
-            // }
             vel.x = -vel.x * DAMPING;
             pos.x = world_width - particle_radius_m;
         } else if pos.x <= particle_radius_m {
@@ -125,6 +122,7 @@ impl Particles {
     ) {
         for i in 0..NO_PARTICLES {
             let acceleration = self.force[i] / self.density[i];
+            let velocity_old = self.vel[i];
 
             self.vel[i] += acceleration * dt;
 
@@ -135,7 +133,7 @@ impl Particles {
                 self.vel[i] = (self.vel[i] / self.vel[i].length()) * MAX_VEL;
             }
 
-            self.pos[i] += self.vel[i] * dt;
+            self.pos[i] += (self.vel[i] + velocity_old) * 0.5 * dt;
             Self::boundaries(world_size, &mut self.pos[i], &mut self.vel[i]);
         }
     }
@@ -173,9 +171,8 @@ impl Particles {
             .for_each(|((i, density_ref), pressure_ref)| {
                 let mut current_density: f32 = 0.0;
                 let grid_coord = search::grid_coord(self.predicted_pos[i]);
-                let grid_neighbours = search::neighbours();
 
-                for (offset_x, offset_y) in grid_neighbours {
+                for (offset_x, offset_y) in search::neighbours() {
                     let neighbor_x = grid_coord.x as i32 + offset_x;
                     let neighbor_y = grid_coord.y as i32 + offset_y;
                     if neighbor_x >= 0
@@ -248,22 +245,6 @@ impl Particles {
                         }
                     }
                 }
-                // for j in 0..NO_PARTICLES {
-                //     if i == j {
-                //         continue;
-                //     }
-                //
-                //     let pressure_force = calculate_pressure_force(
-                //         predicted_pos[i],
-                //         predicted_pos[j],
-                //         pressures[i],
-                //         pressures[j],
-                //         densities[j],
-                //     );
-                //
-                //     current_force -= pressure_force;
-                // }
-
                 let gravity_force = calculate_gravity_force(densities[i]);
                 current_force += gravity_force;
 

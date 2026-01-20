@@ -4,7 +4,13 @@ use crate::constants::{GAS_CONSTANT, GRAVITY, MASS, REST_DENSITY};
 
 pub fn calculate_pressure(density: f32) -> f32 {
     let pressure = GAS_CONSTANT * (density - REST_DENSITY);
-    pressure.max(0.0)
+    pressure
+    // pressure.max(0.0)
+    // let gamma = 7.0;
+    // let B = GAS_CONSTANT * REST_DENSITY / gamma;
+    //
+    // // Tait equation: Non-linear response (stiff)
+    // B * ((density / REST_DENSITY).powf(gamma) - 1.0)
 }
 
 pub fn calculate_pressure_force(

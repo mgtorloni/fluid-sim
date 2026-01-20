@@ -63,9 +63,10 @@ async fn main() {
     //         force: vec2(0.0, 0.0),
     //     });
     // }
-    const PHYSICS_DT: f32 = 0.002;
 
     loop {
+        let dt = get_frame_time() / 10.0;
+        println!("{}", dt);
         let world_size = vec2(screen_width(), screen_height());
         let (mx, my) = mouse_position();
         let mouse_world_pos = vec2(mx, my);
@@ -79,13 +80,8 @@ async fn main() {
         };
 
         clear_background(BLACK);
-        simulation.update(PHYSICS_DT, world_size);
-        simulation.integrate(
-            world_size,
-            mouse_world_pos,
-            interaction_strength,
-            PHYSICS_DT,
-        );
+        simulation.update(dt, world_size);
+        simulation.integrate(world_size, mouse_world_pos, interaction_strength, dt);
         renderer.draw(&simulation);
 
         draw_text(&format!("FPS: {}", get_fps()), 10.0, 20.0, 30.0, WHITE);
