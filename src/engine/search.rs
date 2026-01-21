@@ -28,4 +28,14 @@ pub fn neighbours() -> [(i32, i32); 9] {
         (-1, 1),
     ]
 }
-pub fn find_cell_start(lookups: Vec<(usize, usize)>) {}
+pub fn find_cell_start(lookups: &mut [(usize, usize)], cells: &[(u32, usize)]) {
+    for (i, &(cell_id, _particle_id)) in cells.iter().enumerate() {
+        let data = &mut lookups[cell_id as usize];
+
+        if data.1 == 0 {
+            data.0 = i;
+        }
+
+        data.1 += 1;
+    }
+}

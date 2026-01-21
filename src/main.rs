@@ -68,7 +68,7 @@ async fn main() {
     //     });
     // }
     loop {
-        let dt = get_frame_time() / 10.0;
+        let dt = get_frame_time();
         let world_size = vec2(screen_width(), screen_height());
         let (mx, my) = mouse_position();
         let mouse_pos = vec2(mx, my);
@@ -78,19 +78,25 @@ async fn main() {
             });
         });
 
-        let mouse_captured = egui_macroquad::egui::Context::default().wants_pointer_input();
+        // let mouse_captured = egui_macroquad::egui::Context::default().wants_pointer_input();
 
-        let interaction_strength = if !mouse_captured && is_mouse_button_down(MouseButton::Left) {
+        let interaction_strength = if is_mouse_button_down(MouseButton::Left) {
             IOInteraction::Repel(params.mouse_force)
-        } else if !mouse_captured && is_mouse_button_down(MouseButton::Right) {
+        } else if is_mouse_button_down(MouseButton::Right) {
             IOInteraction::Attract(params.mouse_force)
         } else {
             IOInteraction::None
         };
 
         clear_background(BLACK);
-        simulation.update(dt, world_size, &params);
-        simulation.integrate(world_size, mouse_pos, interaction_strength, dt, &params);
+        simulation.update(world_size, &params);
+        simulation.integrate(
+            world_size,
+            mouse_pos,
+            interaction_strength,
+            dt / 60.0,
+            &params,
+        );
         renderer.draw(&simulation, &params);
 
         draw_text(&format!("FPS: {}", get_fps()), 10.0, 20.0, 30.0, WHITE);

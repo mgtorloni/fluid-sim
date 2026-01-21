@@ -2,7 +2,7 @@ use crate::glam::Vec2;
 use crate::vec2;
 use egui_macroquad::egui;
 
-pub const NO_PARTICLES: usize = 2000;
+pub const NO_PARTICLES: usize = 2300;
 pub const WIDTH: i32 = 1800;
 pub const HEIGHT: i32 = 1000;
 
@@ -22,17 +22,17 @@ pub struct SimulationParams {
 impl Default for SimulationParams {
     fn default() -> Self {
         Self {
-            max_vel: 8000.0,
+            max_vel: 26670.0,
             radius: 3.3,
             mass: 1.0,
             rest_density: 0.0030,
-            gravity: vec2(0.0, 80000.0),
-            gas_constant: 57330000.0,
+            gravity: vec2(0.0, 1977100.0),
+            gas_constant: 1865420032.0,
             influence_radius: 25.0,
             cell_size: 25.0,
             damping: 0.5,
             mouse_influence_radius: 70.0,
-            mouse_force: 2000.0,
+            mouse_force: 13670.0,
         }
     }
 }
