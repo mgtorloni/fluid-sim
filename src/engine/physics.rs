@@ -1,9 +1,9 @@
 use super::kernels::{poly_kernel, spiky_kernel_gradient};
 use crate::Vec2;
-use crate::constants::{GAS_CONSTANT, GRAVITY, MASS, REST_DENSITY};
+use crate::constants::SimulationParams;
 
-pub fn calculate_pressure(density: f32) -> f32 {
-    let pressure = GAS_CONSTANT * (density - REST_DENSITY);
+pub fn calculate_pressure(density: f32, params: &SimulationParams) -> f32 {
+    let pressure = params.gas_constant * (density - params.rest_density);
     pressure
     // pressure.max(0.0)
     // let gamma = 7.0;
@@ -20,16 +20,17 @@ pub fn calculate_pressure_force(
     pressure_other: f32,
     // density: f32,
     density_other: f32,
+    params: &SimulationParams,
 ) -> Vec2 {
-    let grad_spiky = spiky_kernel_gradient(pos, pos_other);
+    let grad_spiky = spiky_kernel_gradient(pos, pos_other, &params);
 
-    MASS * ((pressure + pressure_other) / (2.0 * density_other)) * grad_spiky
+    params.mass * ((pressure + pressure_other) / (2.0 * density_other)) * grad_spiky
     // MASS * ((pressure / density.powi(2)) + (pressure_other / density_other.powi(2))) * grad_spiky
 }
 
-pub fn calculate_gravity_force(density: f32) -> Vec2 {
-    density * GRAVITY
+pub fn calculate_gravity_force(density: f32, params: &SimulationParams) -> Vec2 {
+    density * params.gravity
 }
-pub fn calculate_density(pos: Vec2, pos_other: Vec2) -> f32 {
-    MASS * poly_kernel(pos, pos_other)
+pub fn calculate_density(pos: Vec2, pos_other: Vec2, params: &SimulationParams) -> f32 {
+    params.mass * poly_kernel(pos, pos_other, &params)
 }

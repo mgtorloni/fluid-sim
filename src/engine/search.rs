@@ -1,16 +1,16 @@
-use crate::constants::CELL_SIZE;
-use crate::glam::{IVec2, UVec2, Vec2};
+use crate::constants::SimulationParams;
+use crate::glam::{UVec2, Vec2};
 use crate::uvec2;
 
-pub fn grid_coord(pos: Vec2) -> UVec2 {
+pub fn grid_coord(pos: Vec2, params: &SimulationParams) -> UVec2 {
     uvec2(
-        (pos.x / CELL_SIZE).floor() as u32,
-        (pos.y / CELL_SIZE).floor() as u32,
+        (pos.x / params.cell_size).floor() as u32,
+        (pos.y / params.cell_size).floor() as u32,
     )
 }
 
-pub fn hash(grid_coord: UVec2, world_size: Vec2) -> u32 {
-    let cells_per_row = (world_size.x / CELL_SIZE).floor() as u32;
+pub fn hash(grid_coord: UVec2, world_size: Vec2, params: &SimulationParams) -> u32 {
+    let cells_per_row = (world_size.x / params.cell_size).floor() as u32;
 
     grid_coord.y * cells_per_row + grid_coord.x
 }

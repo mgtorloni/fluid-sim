@@ -4,7 +4,7 @@ mod graphics;
 
 use crate::constants::SimulationParams;
 
-use crate::constants::{HEIGHT, NO_PARTICLES, REST_DENSITY, WIDTH}; // SCALE};
+use crate::constants::{HEIGHT, NO_PARTICLES, WIDTH};
 use crate::engine::simulation::{IOInteraction, Particle, Particles};
 use crate::graphics::renderer::FluidRenderer;
 use egui_macroquad::egui;
@@ -36,6 +36,7 @@ async fn main() {
     let offset_x = (world_size.x - grid_width) / 2.0;
     let offset_y = (world_size.y - grid_height) / 2.0;
 
+    let mut params = SimulationParams::default();
     let mut count = 0;
     for y in 0..rows {
         for x in 0..cols {
@@ -46,7 +47,7 @@ async fn main() {
                 pos: vec2(offset_x + x as f32 * spacing, offset_y + y as f32 * spacing),
                 predicted_pos: vec2(offset_x + x as f32 * spacing, offset_y + y as f32 * spacing),
                 vel: vec2(0.0, 0.0),
-                density: REST_DENSITY,
+                density: params.rest_density,
                 pressure: 0.0,
                 force: vec2(0.0, 0.0),
             });
@@ -66,12 +67,11 @@ async fn main() {
     //         force: vec2(0.0, 0.0),
     //     });
     // }
-    let mut params = SimulationParams::default();
     loop {
         let dt = get_frame_time() / 10.0;
         let world_size = vec2(screen_width(), screen_height());
         let (mx, my) = mouse_position();
-        let mouse_world_pos = vec2(mx, my);
+        let mouse_pos = vec2(mx, my);
         egui_macroquad::ui(|egui_ctx| {
             egui::Window::new("Settings").show(egui_ctx, |ui| {
                 params.ui(ui);
@@ -89,9 +89,9 @@ async fn main() {
         };
 
         clear_background(BLACK);
-        simulation.update(dt, world_size);
-        simulation.integrate(world_size, mouse_world_pos, interaction_strength, dt);
-        renderer.draw(&simulation);
+        simulation.update(dt, world_size, &params);
+        simulation.integrate(world_size, mouse_pos, interaction_strength, dt, &params);
+        renderer.draw(&simulation, &params);
 
         draw_text(&format!("FPS: {}", get_fps()), 10.0, 20.0, 30.0, WHITE);
         egui_macroquad::draw();

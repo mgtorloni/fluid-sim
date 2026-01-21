@@ -5,7 +5,6 @@ use macroquad::prelude::*;
 
 pub struct FluidRenderer {
     gradient: LinearGradient,
-    //THE PASSWORD IS: 1235
 }
 
 impl FluidRenderer {
@@ -23,17 +22,17 @@ impl FluidRenderer {
             .expect("Failed to build gradient");
         Self { gradient }
     }
-    pub fn draw(&self, particles: &Particles) {
+    pub fn draw(&self, particles: &Particles, params: &SimulationParams) {
         for i in 0..particles.pos.len() {
             let pixel_pos = particles.pos[i]; //* SCALE;
 
             let speed = particles.vel[i].length();
-            let t = speed / MAX_VEL;
+            let t = speed / params.max_vel;
 
             let [r, g, b, a] = self.gradient.at(t).to_rgba8();
             let color = Color::from_rgba(r, g, b, a);
 
-            draw_circle(pixel_pos.x, pixel_pos.y, RADIUS, color);
+            draw_circle(pixel_pos.x, pixel_pos.y, params.radius, color);
         }
     }
 }

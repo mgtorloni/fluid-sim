@@ -3,21 +3,8 @@ use crate::vec2;
 use egui_macroquad::egui;
 
 pub const NO_PARTICLES: usize = 2000;
-pub const MAX_VEL: f32 = 5000.0;
 pub const WIDTH: i32 = 1800;
 pub const HEIGHT: i32 = 1000;
-// pub const SCALE: f32 = 50.0;
-pub const RADIUS: f32 = 5.0;
-pub const MASS: f32 = 1.0;
-pub const REST_DENSITY: f32 = 0.0018;
-// pub const GRAVITY: Vec2 = vec2(0.0, 0.0);
-pub const GRAVITY: Vec2 = vec2(0.0, 80000.0);
-pub const GAS_CONSTANT: f32 = 75000000.0;
-pub const INFLUENCE_RADIUS: f32 = 40.0;
-pub const CELL_SIZE: f32 = INFLUENCE_RADIUS;
-pub const DAMPING: f32 = 0.8;
-pub const MOUSE_INFLUENCE_RADIUS: f32 = 70.0;
-pub const MOUSE_FORCE_STRENGTH: f32 = 2000.0;
 
 pub struct SimulationParams {
     pub max_vel: f32,
@@ -35,15 +22,15 @@ pub struct SimulationParams {
 impl Default for SimulationParams {
     fn default() -> Self {
         Self {
-            max_vel: 5000.0,
-            radius: 5.0,
+            max_vel: 8000.0,
+            radius: 3.3,
             mass: 1.0,
-            rest_density: 0.0018,
+            rest_density: 0.0030,
             gravity: vec2(0.0, 80000.0),
-            gas_constant: 75000000.0,
-            influence_radius: 40.0,
-            cell_size: 40.0,
-            damping: 0.8,
+            gas_constant: 57330000.0,
+            influence_radius: 25.0,
+            cell_size: 25.0,
+            damping: 0.5,
             mouse_influence_radius: 70.0,
             mouse_force: 2000.0,
         }
@@ -62,7 +49,11 @@ impl SimulationParams {
                 ui.end_row();
 
                 ui.label("Radius");
-                ui.add(egui::DragValue::new(&mut self.radius).speed(0.1));
+                ui.add(
+                    egui::DragValue::new(&mut self.radius)
+                        .speed(0.1)
+                        .range(0.5..=f32::MAX),
+                );
                 ui.end_row();
 
                 ui.label("Mass");
@@ -70,7 +61,6 @@ impl SimulationParams {
                 ui.end_row();
 
                 ui.label("Rest Density");
-                // Speed is very low here to allow fine-tuning of small decimals
                 ui.add(
                     egui::DragValue::new(&mut self.rest_density)
                         .speed(0.0001)
@@ -88,7 +78,6 @@ impl SimulationParams {
                 ui.end_row();
 
                 ui.label("Gas Constant");
-                // Speed is very high here to handle the millions range
                 ui.add(egui::DragValue::new(&mut self.gas_constant).speed(10000.0));
                 ui.end_row();
 
