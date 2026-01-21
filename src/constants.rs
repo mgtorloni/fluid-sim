@@ -2,7 +2,7 @@ use crate::glam::Vec2;
 use crate::vec2;
 use egui_macroquad::egui;
 
-pub const NO_PARTICLES: usize = 2300;
+pub const NO_PARTICLES: usize = 2000;
 pub const WIDTH: i32 = 1800;
 pub const HEIGHT: i32 = 1000;
 
@@ -22,7 +22,7 @@ pub struct SimulationParams {
 impl Default for SimulationParams {
     fn default() -> Self {
         Self {
-            max_vel: 26670.0,
+            max_vel: 50000.0,
             radius: 3.3,
             mass: 1.0,
             rest_density: 0.0030,

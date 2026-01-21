@@ -35,6 +35,8 @@ pub struct Particles {
     pub density: Vec<ParticleScalar>,
     pub pressure: Vec<ParticleScalar>,
     pub force: Vec<ParticleVector>,
+    cells: Vec<(u32, usize)>,
+    lookups: Vec<(usize, usize)>,
 }
 
 impl IOInteraction {
@@ -78,6 +80,8 @@ impl Particles {
             density: Vec::new(),
             pressure: Vec::new(),
             force: Vec::new(),
+            cells: Vec::new(),
+            lookups: Vec::new(),
         }
     }
 
@@ -145,6 +149,10 @@ impl Particles {
         let grid_width = (world_size.x / params.cell_size).floor() as usize;
         let grid_height = (world_size.y / params.cell_size).floor() as usize;
         let total_cells = grid_width * grid_height;
+        self.cells.clear();
+
+        self.lookups.clear();
+        self.lookups.resize(total_cells, (0usize, 0usize));
 
         for i in 0..NO_PARTICLES {
             let clamped_pos = self.predicted_pos[i].clamp(Vec2::ZERO, world_size - 0.1);
