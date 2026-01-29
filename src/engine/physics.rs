@@ -7,10 +7,10 @@ pub fn calculate_pressure(density: f32, params: &SimulationParams) -> f32 {
     pressure
     // pressure.max(0.0)
     // let gamma = 7.0;
-    // let B = GAS_CONSTANT * REST_DENSITY / gamma;
+    // let B = params.gas_constant * params.rest_density / gamma;
     //
     // // Tait equation: Non-linear response (stiff)
-    // B * ((density / REST_DENSITY).powf(gamma) - 1.0)
+    // B * ((density / params.rest_density).powf(gamma) - 1.0)
 }
 
 pub fn calculate_pressure_force(
