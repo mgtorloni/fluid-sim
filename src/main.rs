@@ -71,7 +71,7 @@ async fn main() {
 
     loop {
         let frame_start = get_time();
-        let dt = get_frame_time();
+        let dt = get_frame_time().min(1.0 / 60.0);
         let world_size = vec2(screen_width(), screen_height());
         let (mx, my) = mouse_position();
         let mouse_pos = vec2(mx, my);
