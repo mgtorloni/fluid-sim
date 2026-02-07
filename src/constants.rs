@@ -2,7 +2,7 @@ use crate::glam::Vec2;
 use crate::vec2;
 use egui_macroquad::egui;
 
-pub const NO_PARTICLES: usize = 5000;
+pub const NO_PARTICLES: usize = 100;
 pub const WIDTH: i32 = 1800;
 pub const HEIGHT: i32 = 1000;
 

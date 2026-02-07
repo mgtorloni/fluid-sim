@@ -3,12 +3,12 @@ mod engine;
 mod graphics;
 
 use crate::constants::SimulationParams;
-
 use crate::constants::{HEIGHT, NO_PARTICLES, WIDTH};
 use crate::engine::simulation::{IOInteraction, Particle, Particles};
 use crate::graphics::renderer::FluidRenderer;
 use egui_macroquad::egui;
 use macroquad::prelude::*;
+use std::{thread, time::Duration};
 
 fn conf() -> Conf {
     Conf {
@@ -67,7 +67,10 @@ async fn main() {
     //         force: vec2(0.0, 0.0),
     //     });
     // }
+    let target_frame_time: f64 = 1.0 / 120.0;
+
     loop {
+        let frame_start = get_time();
         let dt = get_frame_time();
         let world_size = vec2(screen_width(), screen_height());
         let (mx, my) = mouse_position();
@@ -77,8 +80,6 @@ async fn main() {
                 params.ui(ui);
             });
         });
-
-        // let mouse_captured = egui_macroquad::egui::Context::default().wants_pointer_input();
 
         let interaction_strength = if is_mouse_button_down(MouseButton::Left) {
             IOInteraction::Repel(params.mouse_force)
@@ -101,6 +102,12 @@ async fn main() {
 
         draw_text(&format!("FPS: {}", get_fps()), 10.0, 20.0, 30.0, WHITE);
         egui_macroquad::draw();
+
+        let elapsed = get_time() - frame_start;
+        if elapsed < target_frame_time {
+            let sleep_duration = target_frame_time - elapsed;
+            thread::sleep(Duration::from_secs_f64(sleep_duration));
+        }
 
         next_frame().await;
     }
