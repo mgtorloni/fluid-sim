@@ -1,114 +1,113 @@
 mod constants;
-mod engine;
-mod graphics;
+mod gpu;
+use std::sync::Arc;
 
 use crate::constants::SimulationParams;
-use crate::constants::{HEIGHT, NO_PARTICLES, WIDTH};
-use crate::engine::simulation::{IOInteraction, Particle, Particles};
-use crate::graphics::renderer::FluidRenderer;
-use egui_macroquad::egui;
-use macroquad::prelude::*;
-use std::{thread, time::Duration};
+use crate::gpu::context::GpuContext;
+use winit::application::ApplicationHandler;
+use winit::error::EventLoopError;
+use winit::event::WindowEvent;
+use winit::event_loop::ActiveEventLoop;
+use winit::event_loop::{ControlFlow, EventLoop};
+use winit::window::{Window, WindowId};
 
-fn conf() -> Conf {
-    Conf {
-        window_title: "fluidsim".to_owned(),
-        window_height: HEIGHT,
-        window_width: WIDTH,
-        ..Default::default()
+pub struct App {
+    gpu_context: Option<GpuContext>,
+    window: Option<Arc<Window>>,
+    last_render_time: std::time::Instant,
+    frame_rate: u32,
+    params: SimulationParams,
+}
+
+impl Default for App {
+    fn default() -> Self {
+        Self {
+            gpu_context: None,
+            window: None,
+            last_render_time: std::time::Instant::now(),
+            frame_rate: 0,
+            params: SimulationParams::default(),
+        }
     }
 }
 
-#[macroquad::main(conf)]
-async fn main() {
-    let mut simulation = Particles::new();
-    let renderer = FluidRenderer::new();
+impl ApplicationHandler for App {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        if self.window.is_none() {
+            let win_attr = Window::default_attributes()
+                .with_title("Fluid Simulation")
+                .with_inner_size(winit::dpi::PhysicalSize::new(
+                    self.params.width,
+                    self.params.height,
+                ));
+            let window = Arc::new(
+                event_loop
+                    .create_window(win_attr)
+                    .expect("create window err."),
+            );
+            self.window = Some(window.clone());
+            let context = pollster::block_on(GpuContext::new(window.clone(), self.params));
+            self.gpu_context = Some(context);
+            window.request_redraw();
+        }
+    }
 
-    let cols = (NO_PARTICLES as f32).sqrt().ceil() as usize;
-    let rows = NO_PARTICLES.div_ceil(cols);
-    let spacing = 10.0;
-
-    let grid_width = cols as f32 * spacing;
-    let grid_height = rows as f32 * spacing;
-
-    let world_size = vec2(screen_width(), screen_height());
-
-    let offset_x = (world_size.x - grid_width) / 2.0;
-    let offset_y = (world_size.y - grid_height) / 2.0;
-
-    let mut params = SimulationParams::default();
-    let mut count = 0;
-    for y in 0..rows {
-        for x in 0..cols {
-            if count >= NO_PARTICLES {
-                break;
+    fn window_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        _window_id: WindowId,
+        event: WindowEvent,
+    ) {
+        match event {
+            WindowEvent::CloseRequested => {
+                event_loop.exit();
             }
-            simulation.spawn(Particle {
-                pos: vec2(offset_x + x as f32 * spacing, offset_y + y as f32 * spacing),
-                predicted_pos: vec2(offset_x + x as f32 * spacing, offset_y + y as f32 * spacing),
-                vel: vec2(0.0, 0.0),
-                density: params.rest_density,
-                pressure: 0.0,
-                force: vec2(0.0, 0.0),
-            });
-            count += 1;
+            WindowEvent::Resized(physical_size) => {
+                if let Some(gpu) = &mut self.gpu_context {
+                    gpu.resize(physical_size);
+                    self.params.width = physical_size.width as f32;
+                    self.params.height = physical_size.height as f32;
+                    gpu.update_params(&self.params);
+                }
+            }
+            WindowEvent::RedrawRequested => {
+                if let Some(gpu) = &mut self.gpu_context {
+                    gpu.compute(self.params.no_particles);
+                    match gpu.render(self.params.no_particles) {
+                        Ok(_) => {}
+                        Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
+                            gpu.resize(gpu.size);
+                        }
+                        Err(wgpu::SurfaceError::OutOfMemory) => {
+                            event_loop.exit();
+                        }
+
+                        Err(e) => eprintln!("{:?}", e),
+                    }
+                }
+                self.frame_rate += 1;
+                let elapsed = self.last_render_time.elapsed().as_secs_f32();
+                if elapsed >= 0.5 {
+                    let fps = (self.frame_rate as f32 / elapsed).round() as u32;
+                    if let Some(window) = &self.window {
+                        window.set_title(&format!("Fluid Simulation | FPS: {}", fps));
+                    }
+                    self.frame_rate = 0;
+                    self.last_render_time = std::time::Instant::now();
+                }
+                if let Some(window) = &self.window {
+                    window.request_redraw();
+                }
+            }
+            _ => (),
         }
     }
+}
 
-    // for _ in 0..NO_PARTICLES {
-    //     simulation.spawn(Particle {
-    //         pos: vec2(
-    //             rand::gen_range(0.0, world_size.x),
-    //             rand::gen_range(0.0, world_size.y),
-    //         ),
-    //         vel: vec2(0.0, 0.0),
-    //         density: REST_DENSITY,
-    //         pressure: 0.0,
-    //         force: vec2(0.0, 0.0),
-    //     });
-    // }
-    let target_frame_time: f64 = 1.0 / 120.0;
+fn main() -> Result<(), EventLoopError> {
+    let event_loop = EventLoop::new().unwrap();
+    event_loop.set_control_flow(ControlFlow::Poll);
 
-    loop {
-        let frame_start = get_time();
-        let dt = get_frame_time().min(1.0 / 60.0);
-        let world_size = vec2(screen_width(), screen_height());
-        let (mx, my) = mouse_position();
-        let mouse_pos = vec2(mx, my);
-        egui_macroquad::ui(|egui_ctx| {
-            egui::Window::new("Settings").show(egui_ctx, |ui| {
-                params.ui(ui);
-            });
-        });
-
-        let interaction_strength = if is_mouse_button_down(MouseButton::Left) {
-            IOInteraction::Repel(params.mouse_force)
-        } else if is_mouse_button_down(MouseButton::Right) {
-            IOInteraction::Attract(params.mouse_force)
-        } else {
-            IOInteraction::None
-        };
-
-        clear_background(BLACK);
-        simulation.update(world_size, &params);
-        simulation.integrate(
-            world_size,
-            mouse_pos,
-            interaction_strength,
-            dt / 60.0,
-            &params,
-        );
-        renderer.draw(&simulation, &params);
-
-        draw_text(&format!("FPS: {}", get_fps()), 10.0, 20.0, 30.0, WHITE);
-        egui_macroquad::draw();
-
-        let elapsed = get_time() - frame_start;
-        if elapsed < target_frame_time {
-            let sleep_duration = target_frame_time - elapsed;
-            thread::sleep(Duration::from_secs_f64(sleep_duration));
-        }
-
-        next_frame().await;
-    }
+    let mut app = App::default();
+    event_loop.run_app(&mut app)
 }
