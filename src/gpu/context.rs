@@ -1,8 +1,10 @@
 use crate::constants::SimulationParams;
 use bytemuck::{Pod, Zeroable};
 use rand::RngExt;
+use std::num::NonZeroU32;
 use std::sync::Arc;
 use wgpu::{self, PipelineCompilationOptions, util::DeviceExt};
+use wgpu_sort;
 use winit::window::Window;
 
 pub struct GpuContext {
@@ -11,11 +13,18 @@ pub struct GpuContext {
     pub surface: wgpu::Surface<'static>,
     pub size: winit::dpi::PhysicalSize<u32>,
     pub config: wgpu::SurfaceConfiguration,
+
+    pub hash_pipeline: wgpu::ComputePipeline,
+    pub lookups_pipeline: wgpu::ComputePipeline,
     pub compute_pipeline: wgpu::ComputePipeline,
     pub render_pipeline: wgpu::RenderPipeline,
+
     pub compute_bind_group: wgpu::BindGroup,
     pub constants_buffer: wgpu::Buffer,
     pub lookups_buffer: wgpu::Buffer,
+
+    pub sorter: wgpu_sort::GPUSorter,
+    pub sort_buffers: wgpu_sort::SortBuffers,
 }
 
 #[repr(C)]
@@ -42,10 +51,7 @@ pub struct GpuParticle {
 impl GpuContext {
     pub async fn new(window: Arc<Window>, params: SimulationParams) -> Self {
         let size = window.inner_size();
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::all(),
-            ..Default::default()
-        });
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
         let surface = instance
             .create_surface(window.clone())
             .expect("Failed to create surface");
@@ -133,12 +139,9 @@ impl GpuContext {
             contents: bytemuck::cast_slice(&[params]),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
-        let cells_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Cells Buffer"),
-            size: (params.no_particles * 8) as wgpu::BufferAddress,
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+        let sorter = wgpu_sort::GPUSorter::new(&device, 32);
+        let sort_buffers =
+            sorter.create_sort_buffers(&device, NonZeroU32::new(params.no_particles).unwrap());
 
         let grid_width = (params.width / params.cell_size).floor() as u32;
         let grid_height = (params.height / params.cell_size).floor() as u32;
@@ -195,6 +198,16 @@ impl GpuContext {
                         },
                         count: None,
                     },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 4,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
                 ],
             });
         let compute_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -211,19 +224,26 @@ impl GpuContext {
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
-                    resource: cells_buffer.as_entire_binding(),
+                    resource: sort_buffers.keys().as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 3,
+                    resource: sort_buffers.values().as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
                     resource: lookups_buffer.as_entire_binding(),
                 },
             ],
         });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Compute Pipeline Layout"),
-            bind_group_layouts: &[&compute_bind_group_layout],
+            bind_group_layouts: &[Some(&compute_bind_group_layout)],
             immediate_size: 0,
         });
+
+        let search_shader =
+            device.create_shader_module(wgpu::include_wgsl!("./shaders/search.wgsl"));
         let update_shader =
             device.create_shader_module(wgpu::include_wgsl!("./shaders/update.wgsl"));
         let render_shader =
@@ -238,6 +258,24 @@ impl GpuContext {
             entry_point: Some("main"),
             compilation_options: PipelineCompilationOptions::default(),
         });
+        let hash_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("Hash Pipeline"),
+            layout: Some(&pipeline_layout),
+            cache: None,
+            module: &search_shader,
+            entry_point: Some("hash_particles"),
+            compilation_options: PipelineCompilationOptions::default(),
+        });
+
+        let lookups_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("Lookups Pipeline"),
+            layout: Some(&pipeline_layout),
+            cache: None,
+            module: &search_shader,
+            entry_point: Some("build_lookups"),
+            compilation_options: PipelineCompilationOptions::default(),
+        });
+
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
             layout: Some(&pipeline_layout),
@@ -278,11 +316,15 @@ impl GpuContext {
             queue,
             config,
             compute_bind_group,
+            hash_pipeline,
+            lookups_pipeline,
             compute_pipeline,
             render_pipeline,
             size,
             constants_buffer,
             lookups_buffer,
+            sort_buffers,
+            sorter,
         }
     }
 
@@ -306,7 +348,32 @@ impl GpuContext {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("Compute Encoder"),
             });
+        let workgroup_count = (num_particles as f32 / 64.0).ceil() as u32;
+
+        {
+            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("Assign Cells Pass"),
+                ..Default::default()
+            });
+            compute_pass.set_pipeline(&self.hash_pipeline);
+            compute_pass.set_bind_group(0, &self.compute_bind_group, &[]);
+            compute_pass.dispatch_workgroups(workgroup_count, 1, 1);
+        }
+
+        self.sorter
+            .sort(&mut encoder, &self.queue, &self.sort_buffers, None);
+
         encoder.clear_buffer(&self.lookups_buffer, 0, None);
+
+        {
+            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("Calculate Lookups Pass"),
+                ..Default::default()
+            });
+            compute_pass.set_pipeline(&self.lookups_pipeline);
+            compute_pass.set_bind_group(0, &self.compute_bind_group, &[]);
+            compute_pass.dispatch_workgroups(workgroup_count, 1, 1);
+        }
 
         {
             let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -322,8 +389,12 @@ impl GpuContext {
 
         self.queue.submit(std::iter::once(encoder.finish()));
     }
-    pub fn render(&mut self, num_particles: u32) -> Result<(), wgpu::SurfaceError> {
-        let output = self.surface.get_current_texture()?;
+    pub fn render(&mut self, num_particles: u32) -> Result<(), wgpu::CurrentSurfaceTexture> {
+        let output = match self.surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(frame) => frame,
+            wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
+            error => return Err(error),
+        };
         let view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());

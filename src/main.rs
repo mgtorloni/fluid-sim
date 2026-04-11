@@ -75,10 +75,13 @@ impl ApplicationHandler for App {
                     gpu.compute(self.params.no_particles);
                     match gpu.render(self.params.no_particles) {
                         Ok(_) => {}
-                        Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
+                        Err(wgpu::CurrentSurfaceTexture::Lost)
+                        | Err(wgpu::CurrentSurfaceTexture::Outdated) => {
                             gpu.resize(gpu.size);
                         }
-                        Err(wgpu::SurfaceError::OutOfMemory) => {
+                        Err(wgpu::CurrentSurfaceTexture::Occluded)
+                        | Err(wgpu::CurrentSurfaceTexture::Timeout) => {}
+                        Err(wgpu::CurrentSurfaceTexture::Validation) => {
                             event_loop.exit();
                         }
 
