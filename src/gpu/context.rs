@@ -16,6 +16,7 @@ pub struct GpuContext {
 
     pub hash_pipeline: wgpu::ComputePipeline,
     pub lookups_pipeline: wgpu::ComputePipeline,
+    pub density_pipeline: wgpu::ComputePipeline,
     pub compute_pipeline: wgpu::ComputePipeline,
     pub render_pipeline: wgpu::RenderPipeline,
 
@@ -258,6 +259,14 @@ impl GpuContext {
             entry_point: Some("main"),
             compilation_options: PipelineCompilationOptions::default(),
         });
+        let density_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("Density Pipeline"),
+            layout: Some(&pipeline_layout),
+            cache: None,
+            module: &update_shader,
+            entry_point: Some("calculate_pressure_density"),
+            compilation_options: PipelineCompilationOptions::default(),
+        });
         let hash_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("Hash Pipeline"),
             layout: Some(&pipeline_layout),
@@ -317,6 +326,7 @@ impl GpuContext {
             config,
             compute_bind_group,
             hash_pipeline,
+            density_pipeline,
             lookups_pipeline,
             compute_pipeline,
             render_pipeline,
@@ -371,6 +381,15 @@ impl GpuContext {
                 ..Default::default()
             });
             compute_pass.set_pipeline(&self.lookups_pipeline);
+            compute_pass.set_bind_group(0, &self.compute_bind_group, &[]);
+            compute_pass.dispatch_workgroups(workgroup_count, 1, 1);
+        }
+        {
+            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("Density Compute Pass"),
+                ..Default::default()
+            });
+            compute_pass.set_pipeline(&self.density_pipeline);
             compute_pass.set_bind_group(0, &self.compute_bind_group, &[]);
             compute_pass.dispatch_workgroups(workgroup_count, 1, 1);
         }

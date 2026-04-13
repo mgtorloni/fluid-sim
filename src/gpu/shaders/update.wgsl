@@ -1,4 +1,6 @@
 const PI = 3.141592;
+const NEIGHBOUR_CELL_COUNT: u32 = 9;
+
 struct Constants {
 	width:f32,
 	height:f32,
@@ -81,9 +83,10 @@ fn spiky_kernel_gradient(pos:vec2<f32>, pos_other:vec2<f32>, constants:Constants
     } else {
         return vec2(0.0, 0.0);
     
+    }
 }
 
-fn poly_kernel(pos: vec2<f32>, pos_other: vec2<f32>, constants: Constants) -> f32 {
+fn poly_kernel(pos: vec2<f32>, pos_other: vec2<f32>) -> f32 {
     // used for density
     //(315 / (64πh⁹)) * (h² - r²)³  if r <= h
     // 0 if r>h
@@ -104,30 +107,68 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 		return;
 	}
 
-	update(index);
     integrate(index);
 }
 
-fn find_cell_start(index: u32) {
-	let cell_id = cells_ids[index];
-
-    if index == 0u {
-        lookups[cell_id].start_index = index;
-    } else {
-        let prev_cell_id = cells_ids[index - 1u];
-
-        if cell_id != prev_cell_id {
-            lookups[cell_id].start_index = index;
-        }
-    }
-    atomicAdd(&lookups[cell_id].count, 1u);
-	
+fn neighbours() -> array<vec2<i32>, NEIGHBOUR_CELL_COUNT> {
+	return array<vec2<i32>, NEIGHBOUR_CELL_COUNT>(
+		vec2<i32>(-1, -1), vec2<i32>(0, -1), vec2<i32>(1, -1),
+		vec2<i32>(-1, 0), vec2<i32>(0, 0), vec2<i32>(1, 0),
+		vec2<i32>(-1, 1), vec2<i32>(0, 1), vec2<i32>(1, 1)
+	);
 }
 
+fn grid_coord(pos:vec2<f32>) -> vec2<u32>{
+    return vec2(
+        u32(floor(pos.x / constants.cell_size)),
+        u32(floor(pos.y / constants.cell_size))
+    );
 
-fn update(index: u32) {
+}
 
+fn hash(grid_coord: vec2<u32>) -> u32 {
+    let cells_per_row = u32(floor(constants.width / constants.cell_size));
 
+    return grid_coord.y * cells_per_row + grid_coord.x;
+}
+
+fn calculate_density(pos:vec2<f32>,pos_other:vec2<f32>) -> f32{
+    return constants.mass * poly_kernel(pos,pos_other);
+}
+
+@compute @workgroup_size(64)
+fn calculate_pressure_density(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    let index = global_id.x;
+    if (index >= constants.no_particles){
+        return;
+    }
+    particles[index].density = 0.0;
+    let grid_width = floor(constants.width / constants.cell_size);
+    let grid_height = floor(constants.height / constants.cell_size);
+
+    let grid_coord = grid_coord(particles[index].predicted_pos);
+    let grid_neighbours= neighbours();
+    for (var i: u32 = 0u; i < NEIGHBOUR_CELL_COUNT; i += 1u) {
+        let offset = grid_neighbours[i];
+        let neighbour_x = i32(grid_coord.x) + offset.x;
+        let neighbour_y = i32(grid_coord.y) + offset.y;
+        if neighbour_x >= 0 
+            && neighbour_x < i32(grid_width) 
+            && neighbour_y >= 0 
+            && neighbour_y < i32(grid_height)
+        {
+            let cell_key = hash(vec2(u32(neighbour_x),u32(neighbour_y)));
+            let start_index = lookups[cell_key].start_index;
+            let count = atomicLoad(&lookups[cell_key].count);
+            for (var j:u32; j<count; j+= 1u){
+                let particle_idx = particle_ids[start_index + j];
+                particles[index].density += calculate_density(
+                    particles[index].predicted_pos,
+                    particles[particle_idx].predicted_pos);
+            }
+
+        }
+    }
 }
 
 fn integrate(index: u32) {	

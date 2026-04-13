@@ -58,29 +58,7 @@ fn hash(grid_coord:vec2<u32>) -> u32 {
 	return grid_coord.y * cells_per_row + grid_coord.x;
 }
 
-fn neighbours() -> array<vec2<i32>, 9> {
-	return array<vec2<i32>, 9>(
-		vec2<i32>(-1, -1), vec2<i32>(0, -1), vec2<i32>(1, -1),
-		vec2<i32>(-1, 0), vec2<i32>(0, 0), vec2<i32>(1, 0),
-		vec2<i32>(-1, 1), vec2<i32>(0, 1), vec2<i32>(1, 1)
-	);
-}
 
-fn find_cell_start(index: u32) {
-	let cell_id = cells_ids[index];
-
-    if index == 0u {
-        lookups[cell_id].start_index = index;
-    } else {
-        let prev_cell_id = cells_ids[index - 1u];
-
-        if cell_id != prev_cell_id {
-            lookups[cell_id].start_index = index;
-        }
-    }
-    atomicAdd(&lookups[cell_id].count, 1u);
-	
-}
 
 @compute @workgroup_size(64)
 fn hash_particles(@builtin(global_invocation_id) global_id:vec3<u32>){

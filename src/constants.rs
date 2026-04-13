@@ -1,6 +1,6 @@
 use bytemuck::{Pod, Zeroable};
 
-pub const NO_PARTICLES: u32 = 200000;
+pub const NO_PARTICLES: u32 = 20000;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
