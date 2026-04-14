@@ -64,7 +64,7 @@ fn hash(grid_coord:vec2<u32>) -> u32 {
 fn hash_particles(@builtin(global_invocation_id) global_id:vec3<u32>){
     let index = global_id.x;
     if (index >= constants.no_particles) { return; }
-    let clamped_pos = clamp(particles[index].pos, vec2<f32>(0.0, 0.0), vec2<f32>(constants.width, constants.height));	
+    let clamped_pos = clamp(particles[index].predicted_pos, vec2<f32>(0.0, 0.0), vec2<f32>(constants.width - 0.1, constants.height - 0.1));	
     let grid_coord = hash(grid_coord(clamped_pos));
 
     cells_ids[index]= grid_coord;

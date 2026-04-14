@@ -42,8 +42,9 @@ fn pcg_hash(seed: u32) -> u32 {
     return (word >> 22u) ^ word;
 }
 
-fn random_f32(seed: u32) -> f32 {
-    return f32(pcg_hash(seed)) / 4294967295.0;
+fn random_f32() -> f32 {
+    rand_state = pcg_hash(rand_state);
+    return f32(rand_state) / 4294967295.0;
 }
 
 @group(0) @binding(0) 
@@ -60,17 +61,20 @@ var<storage, read_write> particle_ids: array<u32>;
 @group(0) @binding(4)
 var<storage, read_write> lookups: array<Lookup>;
 
-fn spiky_kernel_gradient(pos:vec2<f32>, pos_other:vec2<f32>, constants:Constants, random_val:f32) -> vec2<f32>{
+var<private> rand_state: u32;
+
+fn spiky_kernel_gradient(pos:vec2<f32>, pos_other:vec2<f32>) -> vec2<f32>{
     // Used for pressure force calculations
     // (-45/(pi*h⁶)) * (h-r)² * r̂ if 0<=r<=h
     // 0 if h<r
+    
     let delta = pos - pos_other;
     let r = dot(delta,delta); // magnitude of the vector pointing at particle i
     let norm_coeff = -10.0 / (PI * pow(constants.influence_radius,5)); // -45.0 / (PI * INFLUENCE_RADIUS.powi(6)) for 3D
 
-    if r < 0.00001 * 0.0001 {
+    if r < 0.00001 * 0.00001 {
         // particles can be in the same position in which case send them in random direction
-        let theta = random_val * 2.0 * PI;
+        let theta = random_f32() * 2.0 * PI;
 
         let random_dir = vec2(cos(theta), sin(theta));
 
@@ -164,7 +168,7 @@ fn calculate_pressure_density(@builtin(global_invocation_id) global_id: vec3<u32
             let cell_key = hash(vec2(u32(neighbour_x),u32(neighbour_y)));
             let start_index = lookups[cell_key].start_index;
             let count = atomicLoad(&lookups[cell_key].count);
-            for (var j:u32; j<count; j+= 1u){
+            for (var j:u32 = 0u ; j<count; j+= 1u){
                 let particle_idx = particle_ids[start_index + j];
                 particles[index].density += calculate_density(
                     particles[index].predicted_pos,
@@ -174,6 +178,61 @@ fn calculate_pressure_density(@builtin(global_invocation_id) global_id: vec3<u32
         }
     }
     particles[index].pressure = calculate_pressure(particles[index].density);
+}
+fn calculate_pressure_vector(
+    pos:vec2<f32>,
+    pos_other:vec2<f32>,
+    pressure:f32,
+    pressure_other:f32,
+    density_other:f32,
+) -> vec2<f32> {
+
+    let grad_spiky = spiky_kernel_gradient(pos,pos_other);
+    return constants.mass * ((pressure + pressure_other)/ (2.0 * density_other)) * grad_spiky;
+
+}
+
+@compute @workgroup_size(64)
+fn calculate_pressure_force(@builtin(global_invocation_id) global_id: vec3<u32>){
+    let index = global_id.x;
+    if (index >= constants.no_particles){
+        return;
+    }
+    particles[index].force = vec2<f32>(0.0, 0.0);
+    rand_state = pcg_hash(index);
+    let grid_width = floor(constants.width / constants.cell_size);
+    let grid_height = floor(constants.height / constants.cell_size);
+
+    let grid_coord = grid_coord(particles[index].predicted_pos);
+    let grid_neighbours= neighbours();
+    for (var i: u32 = 0u; i < NEIGHBOUR_CELL_COUNT; i += 1u) {
+        let offset = grid_neighbours[i];
+        let neighbour_x = i32(grid_coord.x) + offset.x;
+        let neighbour_y = i32(grid_coord.y) + offset.y;
+        if neighbour_x >= 0 
+            && neighbour_x < i32(grid_width) 
+            && neighbour_y >= 0 
+            && neighbour_y < i32(grid_height)
+        {
+            let cell_key = hash(vec2(u32(neighbour_x),u32(neighbour_y)));
+            let start_index = lookups[cell_key].start_index;
+            let count = atomicLoad(&lookups[cell_key].count);
+            for (var j:u32 = 0u; j<count; j+= 1u){
+                let particle_idx = particle_ids[start_index + j];
+                if index == particle_idx{
+                    continue;
+                }
+                particles[index].force -= calculate_pressure_vector(
+                    particles[index].predicted_pos,
+                    particles[particle_idx].predicted_pos,
+                    particles[index].pressure,
+                    particles[particle_idx].pressure,
+                    particles[particle_idx].density
+                );
+            }
+        }
+    }
+    particles[index].force += particles[index].density * constants.gravity;
 }
 
 fn integrate(index: u32) {	
@@ -189,8 +248,7 @@ fn integrate(index: u32) {
 		particles[index].vel = (particles[index].vel / velocity_length) * constants.max_vel;
 	}
 
-	particles[index].vel += constants.gravity * constants.dt;
-	particles[index].pos += particles[index].vel * constants.dt;
+	particles[index].pos += (particles[index].vel + velocity_old) * 0.5 * constants.dt;
     boundaries(index);
     particles[index].predicted_pos = particles[index].pos + particles[index].vel * constants.dt;
 }
