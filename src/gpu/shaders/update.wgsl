@@ -136,6 +136,10 @@ fn calculate_density(pos:vec2<f32>,pos_other:vec2<f32>) -> f32{
     return constants.mass * poly_kernel(pos,pos_other);
 }
 
+fn calculate_pressure(density:f32) -> f32{
+    return constants.gas_constant * (density - constants.rest_density); 
+}
+
 @compute @workgroup_size(64)
 fn calculate_pressure_density(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let index = global_id.x;
@@ -169,6 +173,7 @@ fn calculate_pressure_density(@builtin(global_invocation_id) global_id: vec3<u32
 
         }
     }
+    particles[index].pressure = calculate_pressure(particles[index].density);
 }
 
 fn integrate(index: u32) {	
