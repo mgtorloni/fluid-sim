@@ -80,16 +80,15 @@ impl ApplicationHandler for App {
                     let mut time_to_simulate = delta_time.min(0.1);
 
                     let max_step_dt = 1.0 / 120.0;
-
-                    while time_to_simulate > 0.0 {
+                    let max_substeps = 3;
+                    let mut substeps = 0;
+                    while time_to_simulate > 0.0 && substeps < max_substeps {
                         let step_dt = time_to_simulate.min(max_step_dt);
-
                         self.params.dt = step_dt;
                         gpu.update_params(&self.params);
-
                         gpu.compute(self.params.no_particles);
-
                         time_to_simulate -= step_dt;
+                        substeps += 1;
                     }
 
                     match gpu.render(self.params.no_particles) {

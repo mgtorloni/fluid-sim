@@ -65,7 +65,7 @@ fn vs_main(
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // Shave off the corners to make a perfect circle
-    if length(in.local_pos) > 1.0 {
+    if dot(in.local_pos, in.local_pos) > 1.0 {
         discard; 
     }
     

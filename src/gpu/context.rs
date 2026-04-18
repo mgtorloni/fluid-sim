@@ -91,7 +91,7 @@ impl GpuContext {
             format: surface_format,
             width: size.width.max(1), // wgpu crashes if width/height are 0
             height: size.height.max(1),
-            present_mode: wgpu::PresentMode::AutoVsync,
+            present_mode: wgpu::PresentMode::AutoNoVsync,
             // present_mode: surface_caps.present_modes[0],
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
