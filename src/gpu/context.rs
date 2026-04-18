@@ -91,46 +91,47 @@ impl GpuContext {
             format: surface_format,
             width: size.width.max(1), // wgpu crashes if width/height are 0
             height: size.height.max(1),
-            present_mode: surface_caps.present_modes[0],
+            present_mode: wgpu::PresentMode::AutoVsync,
+            // present_mode: surface_caps.present_modes[0],
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
         };
         let mut initial_particles = Vec::with_capacity(params.no_particles as usize);
 
-        // let cols = (NO_PARTICLES as f32).sqrt().ceil() as usize;
-        // let spacing = 2.0; // Distance between particles
-        // let start_x = 100.0;
-        // let start_y = 100.0;
-        // for i in 0..NO_PARTICLES {
-        //     let x = (i % cols) as f32 * spacing + start_x;
-        //     let y = (i / cols) as f32 * spacing + start_y;
-        //
-        //     initial_particles.push(GpuParticle {
-        //         pos: [x, y],
-        //         predicted_pos: [x, y],
-        //         vel: [0.0, 0.0],
-        //         force: [0.0, 0.0],
-        //         density: 0.0,
-        //         pressure: 0.0,
-        //     });
-        // }
-        let mut rng = rand::rng();
+        let cols = (params.no_particles as f32).sqrt().ceil() as u32;
+        let spacing = 2.0;
+        let start_x = config.width as f32 / 2.0 - (cols as f32 * spacing) / 2.0;
+        let start_y = config.height as f32 / 2.0 - (cols as f32 * spacing) / 2.0;
+        for i in 0..params.no_particles {
+            let x = (i % cols) as f32 * spacing + start_x;
+            let y = (i / cols) as f32 * spacing + start_y;
 
-        for _ in 0..params.no_particles {
-            let (x, y) = (
-                rng.random_range(0.0..=params.width),
-                rng.random_range(0.0..=params.height),
-            );
             initial_particles.push(GpuParticle {
                 pos: [x, y],
                 predicted_pos: [x, y],
                 vel: [0.0, 0.0],
-                density: params.rest_density,
-                pressure: 0.0,
                 force: [0.0, 0.0],
+                density: 0.0,
+                pressure: 0.0,
             });
         }
+        // let mut rng = rand::rng();
+
+        // for _ in 0..params.no_particles {
+        //     let (x, y) = (
+        //         rng.random_range(0.0..=params.width),
+        //         rng.random_range(0.0..=params.height),
+        //     );
+        //     initial_particles.push(GpuParticle {
+        //         pos: [x, y],
+        //         predicted_pos: [x, y],
+        //         vel: [0.0, 0.0],
+        //         density: params.rest_density,
+        //         pressure: 0.0,
+        //         force: [0.0, 0.0],
+        //     });
+        // }
         let particle_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
             contents: bytemuck::cast_slice(&initial_particles),

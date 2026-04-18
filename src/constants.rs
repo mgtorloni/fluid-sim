@@ -1,6 +1,6 @@
 use bytemuck::{Pod, Zeroable};
 
-pub const NO_PARTICLES: u32 = 20000;
+pub const NO_PARTICLES: u32 = 40000;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
@@ -35,15 +35,15 @@ impl Default for SimulationParams {
             width: 1920.0,
             height: 1080.0,
             no_particles: NO_PARTICLES,
-            max_vel: 400.0,
-            radius: 2.0,
+            max_vel: 500.0,
+            radius: 1.0,
             mass: 1.0,
-            rest_density: 0.00050,
-            dt: 1.0 / 60.0,
-            gravity: [0.0, 270.0],
-            gas_constant: 50600.0,
-            influence_radius: 8.0,
-            cell_size: 8.0,
+            rest_density: 0.03,
+            dt: 1.0,
+            gravity: [0.0, 450.0],
+            gas_constant: 200000.0,
+            influence_radius: 10.0,
+            cell_size: 10.0,
             damping: 0.3,
             _padding: [0.0; 2],
             // mouse_influence_radius: 70.0,

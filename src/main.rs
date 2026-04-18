@@ -15,6 +15,7 @@ pub struct App {
     gpu_context: Option<GpuContext>,
     window: Option<Arc<Window>>,
     last_render_time: std::time::Instant,
+    last_frame_time: std::time::Instant,
     frame_rate: u32,
     params: SimulationParams,
 }
@@ -25,6 +26,7 @@ impl Default for App {
             gpu_context: None,
             window: None,
             last_render_time: std::time::Instant::now(),
+            last_frame_time: std::time::Instant::now(),
             frame_rate: 0,
             params: SimulationParams::default(),
         }
@@ -71,8 +73,25 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::RedrawRequested => {
+                let now = std::time::Instant::now();
+                let delta_time = (now - self.last_frame_time).as_secs_f32();
+                self.last_frame_time = now;
                 if let Some(gpu) = &mut self.gpu_context {
-                    gpu.compute(self.params.no_particles);
+                    let mut time_to_simulate = delta_time.min(0.1);
+
+                    let max_step_dt = 1.0 / 120.0;
+
+                    while time_to_simulate > 0.0 {
+                        let step_dt = time_to_simulate.min(max_step_dt);
+
+                        self.params.dt = step_dt;
+                        gpu.update_params(&self.params);
+
+                        gpu.compute(self.params.no_particles);
+
+                        time_to_simulate -= step_dt;
+                    }
+
                     match gpu.render(self.params.no_particles) {
                         Ok(_) => {}
                         Err(wgpu::CurrentSurfaceTexture::Lost)
@@ -84,7 +103,6 @@ impl ApplicationHandler for App {
                         Err(wgpu::CurrentSurfaceTexture::Validation) => {
                             event_loop.exit();
                         }
-
                         Err(e) => eprintln!("{:?}", e),
                     }
                 }
