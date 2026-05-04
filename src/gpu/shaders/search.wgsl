@@ -22,7 +22,7 @@ struct Cell {
 
 struct Lookup {
 	start_index: u32,	
-	count: atomic<u32>
+	end_index: u32
 }
 
 struct Particle{
@@ -78,15 +78,10 @@ fn build_lookups(@builtin(global_invocation_id) global_id:vec3<u32>){
     if (index >= constants.no_particles) {return;}
     let cell_id = cells_ids[index];
     
-    atomicAdd(&lookups[cell_id].count, 1u);
-    
-    if index == 0u {
+    if index == 0u || cells_ids[index - 1u] != cell_id {
         lookups[cell_id].start_index = index;
-    } else{
-        let prev_cell_id = cells_ids[index - 1u];
-        if cell_id != prev_cell_id{
-            lookups[cell_id].start_index = index;
-        }
+    } if index == constants.no_particles - 1u || cells_ids[index + 1u] != cell_id {
+        lookups[cell_id].end_index = index + 1u;
     }
 }
 

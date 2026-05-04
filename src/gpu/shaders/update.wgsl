@@ -33,7 +33,7 @@ struct Cell {
 
 struct Lookup {
 	start_index: u32,	
-	count: atomic<u32>
+    end_index: u32,
 }
 
 fn pcg_hash(seed: u32) -> u32 {
@@ -167,9 +167,9 @@ fn calculate_pressure_density(@builtin(global_invocation_id) global_id: vec3<u32
         {
             let cell_key = hash(vec2(u32(neighbour_x),u32(neighbour_y)));
             let start_index = lookups[cell_key].start_index;
-            let count = atomicLoad(&lookups[cell_key].count);
-            for (var j:u32 = 0u ; j<count; j+= 1u){
-                let particle_idx = particle_ids[start_index + j];
+            let end_index = lookups[cell_key].end_index;
+            for (var j:u32 = start_index; j<end_index; j+= 1u){
+                let particle_idx = particle_ids[j];
                 particles[index].density += calculate_density(
                     particles[index].predicted_pos,
                     particles[particle_idx].predicted_pos);
@@ -216,9 +216,9 @@ fn calculate_pressure_force(@builtin(global_invocation_id) global_id: vec3<u32>)
         {
             let cell_key = hash(vec2(u32(neighbour_x),u32(neighbour_y)));
             let start_index = lookups[cell_key].start_index;
-            let count = atomicLoad(&lookups[cell_key].count);
-            for (var j:u32 = 0u; j<count; j+= 1u){
-                let particle_idx = particle_ids[start_index + j];
+            let end_index = lookups[cell_key].end_index;
+            for (var j:u32 = start_index; j<end_index; j+= 1u){
+                let particle_idx = particle_ids[j];
                 if index == particle_idx{
                     continue;
                 }
