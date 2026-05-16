@@ -60,6 +60,10 @@ impl ApplicationHandler for App {
         _window_id: WindowId,
         event: WindowEvent,
     ) {
+        if let (Some(gpu), Some(window)) = (&mut self.gpu_context, &self.window) {
+            gpu.handle_window_event(window, &event);
+        }
+
         match event {
             WindowEvent::CloseRequested => {
                 event_loop.exit();
@@ -76,11 +80,11 @@ impl ApplicationHandler for App {
                 let now = std::time::Instant::now();
                 let delta_time = (now - self.last_frame_time).as_secs_f32();
                 self.last_frame_time = now;
-                if let Some(gpu) = &mut self.gpu_context {
+                if let (Some(gpu), Some(window)) = (&mut self.gpu_context, self.window.as_ref()) {
                     let mut time_to_simulate = delta_time.min(0.1);
 
-                    let max_step_dt = 1.0 / 120.0;
-                    let max_substeps = 3;
+                    let max_step_dt = 1.0 / 60.0;
+                    let max_substeps = 1;
                     let mut substeps = 0;
                     while time_to_simulate > 0.0 && substeps < max_substeps {
                         let step_dt = time_to_simulate.min(max_step_dt);
@@ -91,7 +95,20 @@ impl ApplicationHandler for App {
                         substeps += 1;
                     }
 
-                    match gpu.render(self.params.no_particles) {
+                    let num_particles = self.params.no_particles;
+                    let params = &mut self.params;
+                    match gpu.render(
+                        window,
+                        |ctx| {
+                            egui::Window::new("Parameters")
+                                .anchor(egui::Align2::LEFT_TOP, egui::vec2(8.0, 8.0))
+                                .resizable(false)
+                                .show(ctx, |ui| {
+                                    params.ui(ui);
+                                });
+                        },
+                        num_particles,
+                    ) {
                         Ok(_) => {}
                         Err(wgpu::CurrentSurfaceTexture::Lost)
                         | Err(wgpu::CurrentSurfaceTexture::Outdated) => {

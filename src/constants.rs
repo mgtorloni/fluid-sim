@@ -1,6 +1,6 @@
 use bytemuck::{Pod, Zeroable};
 
-pub const NO_PARTICLES: u32 = 40000;
+pub const NO_PARTICLES: u32 = 100000;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
@@ -32,18 +32,18 @@ pub struct SimulationParams {
 impl Default for SimulationParams {
     fn default() -> Self {
         Self {
-            width: 1920.0,
-            height: 1080.0,
+            width: 1700.0,
+            height: 1000.0,
             no_particles: NO_PARTICLES,
             max_vel: 500.0,
-            radius: 1.0,
+            radius: 2.0,
             mass: 1.0,
-            rest_density: 0.03,
+            rest_density: 0.002,
             dt: 1.0,
             gravity: [0.0, 450.0],
-            gas_constant: 300000.0,
-            influence_radius: 10.0,
-            cell_size: 10.0,
+            gas_constant: 70000.0,
+            influence_radius: 4.0,
+            cell_size: 4.0,
             damping: 0.3,
             _padding: [0.0; 2],
             // mouse_influence_radius: 70.0,
@@ -51,77 +51,76 @@ impl Default for SimulationParams {
         }
     }
 }
-//
-// impl SimulationParams {
-//     pub fn ui(&mut self, ui: &mut egui::Ui) {
-//         egui::Grid::new("sim_params_grid")
-//             .num_columns(2)
-//             .spacing([40.0, 4.0])
-//             .striped(true)
-//             .show(ui, |ui| {
-//                 ui.label("Max Velocity");
-//                 ui.add(egui::DragValue::new(&mut self.max_vel).speed(10.0));
-//                 ui.end_row();
-//
-//                 ui.label("Radius");
-//                 ui.add(
-//                     egui::DragValue::new(&mut self.radius)
-//                         .speed(0.1)
-//                         .range(0.5..=f32::MAX),
-//                 );
-//                 ui.end_row();
-//
-//                 ui.label("Mass");
-//                 ui.add(egui::DragValue::new(&mut self.mass).speed(0.1));
-//                 ui.end_row();
-//
-//                 ui.label("Rest Density");
-//                 ui.add(
-//                     egui::DragValue::new(&mut self.rest_density)
-//                         .speed(0.0001)
-//                         .max_decimals(4),
-//                 );
-//                 ui.end_row();
-//
-//                 ui.label("Gravity");
-//                 ui.horizontal(|ui| {
-//                     ui.label("X");
-//                     ui.add(egui::DragValue::new(&mut self.gravity.x).speed(100.0));
-//                     ui.label("Y");
-//                     ui.add(egui::DragValue::new(&mut self.gravity.y).speed(100.0));
-//                 });
-//                 ui.end_row();
-//
-//                 ui.label("Gas Constant");
-//                 ui.add(egui::DragValue::new(&mut self.gas_constant).speed(10000.0));
-//                 ui.end_row();
-//
-//                 ui.label("Influence Radius");
-//                 ui.add(egui::DragValue::new(&mut self.influence_radius).speed(1.0));
-//                 ui.end_row();
-//
-//                 ui.label("Cell Size");
-//                 ui.add(egui::DragValue::new(&mut self.cell_size).speed(1.0));
-//                 ui.end_row();
-//
-//                 ui.label("Damping");
-//                 ui.add(
-//                     egui::DragValue::new(&mut self.damping)
-//                         .speed(0.01)
-//                         .range(0.0..=1.0),
-//                 );
-//                 ui.end_row();
-//
-//                 ui.heading("Mouse Interaction");
-//                 ui.end_row();
-//
-//                 ui.label("Mouse Radius");
-//                 ui.add(egui::DragValue::new(&mut self.mouse_influence_radius).speed(1.0));
-//                 ui.end_row();
-//
-//                 ui.label("Mouse Force");
-//                 ui.add(egui::DragValue::new(&mut self.mouse_force).speed(10.0));
-//                 ui.end_row();
-//             });
-//     }
-// }
+impl SimulationParams {
+    pub fn ui(&mut self, ui: &mut egui::Ui) {
+        egui::Grid::new("sim_params_grid")
+            .num_columns(2)
+            .spacing([40.0, 4.0])
+            .striped(true)
+            .show(ui, |ui| {
+                ui.label("Max Velocity");
+                ui.add(egui::DragValue::new(&mut self.max_vel).speed(10.0));
+                ui.end_row();
+
+                ui.label("Radius");
+                ui.add(
+                    egui::DragValue::new(&mut self.radius)
+                        .speed(0.1)
+                        .range(0.5..=f32::MAX),
+                );
+                ui.end_row();
+
+                ui.label("Mass");
+                ui.add(egui::DragValue::new(&mut self.mass).speed(0.1));
+                ui.end_row();
+
+                ui.label("Rest Density");
+                ui.add(
+                    egui::DragValue::new(&mut self.rest_density)
+                        .speed(0.0001)
+                        .max_decimals(4),
+                );
+                ui.end_row();
+
+                ui.label("Gravity");
+                ui.horizontal(|ui| {
+                    ui.label("X");
+                    ui.add(egui::DragValue::new(&mut self.gravity[0]).speed(100.0));
+                    ui.label("Y");
+                    ui.add(egui::DragValue::new(&mut self.gravity[1]).speed(100.0));
+                });
+                ui.end_row();
+
+                ui.label("Gas Constant");
+                ui.add(egui::DragValue::new(&mut self.gas_constant).speed(1000.0));
+                ui.end_row();
+
+                ui.label("Influence Radius");
+                ui.add(egui::DragValue::new(&mut self.influence_radius).speed(1.0));
+                ui.end_row();
+
+                ui.label("Cell Size");
+                ui.add(egui::DragValue::new(&mut self.cell_size).speed(1.0));
+                ui.end_row();
+
+                ui.label("Damping");
+                ui.add(
+                    egui::DragValue::new(&mut self.damping)
+                        .speed(0.01)
+                        .range(0.0..=1.0),
+                );
+                ui.end_row();
+
+                // ui.heading("Mouse Interaction");
+                // ui.end_row();
+
+                // ui.label("Mouse Radius");
+                // ui.add(egui::DragValue::new(&mut self.mouse_influence_radius).speed(1.0));
+                // ui.end_row();
+
+                // ui.label("Mouse Force");
+                // ui.add(egui::DragValue::new(&mut self.mouse_force).speed(10.0));
+                // ui.end_row();
+            });
+    }
+}

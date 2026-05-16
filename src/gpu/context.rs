@@ -20,6 +20,10 @@ pub struct GpuContext {
     pub lookups_buffer: wgpu::Buffer,
     pub sorter: wgpu_sort::GPUSorter,
     pub sort_buffers: wgpu_sort::SortBuffers,
+
+    pub egui_ctx: egui::Context,
+    pub egui_state: egui_winit::State,
+    pub egui_renderer: egui_wgpu::Renderer,
 }
 
 impl GpuContext {
@@ -102,6 +106,21 @@ impl GpuContext {
             &sort_buffers,
             &lookups_buffer,
         );
+
+        let egui_ctx = egui::Context::default();
+        let egui_state = egui_winit::State::new(
+            egui_ctx.clone(),
+            egui::ViewportId::ROOT,
+            window.as_ref(),
+            None,
+            None,
+            None,
+        );
+        let egui_renderer = egui_wgpu::Renderer::new(
+            &device,
+            surface_format,
+            egui_wgpu::RendererOptions::default(),
+        );
         Self {
             surface,
             device,
@@ -113,7 +132,14 @@ impl GpuContext {
             lookups_buffer,
             sort_buffers,
             sorter,
+            egui_ctx,
+            egui_state,
+            egui_renderer,
         }
+    }
+
+    pub fn handle_window_event(&mut self, window: &Window, event: &winit::event::WindowEvent) {
+        let _ = self.egui_state.on_window_event(window, event);
     }
 
     pub fn update_params(&self, params: &SimulationParams) {
@@ -196,7 +222,22 @@ impl GpuContext {
 
         self.queue.submit(std::iter::once(encoder.finish()));
     }
-    pub fn render(&mut self, num_particles: u32) -> Result<(), wgpu::CurrentSurfaceTexture> {
+    pub fn render(
+        &mut self,
+        window: &Window,
+        ui_builder: impl FnOnce(&egui::Context),
+        num_particles: u32,
+    ) -> Result<(), wgpu::CurrentSurfaceTexture> {
+        let raw_input = self.egui_state.take_egui_input(window);
+        self.egui_ctx.begin_pass(raw_input);
+        ui_builder(&self.egui_ctx);
+        let full_output = self.egui_ctx.end_pass();
+        self.egui_state
+            .handle_platform_output(window, full_output.platform_output);
+        let clipped_primitives = self
+            .egui_ctx
+            .tessellate(full_output.shapes, full_output.pixels_per_point);
+
         let output = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame) => frame,
             wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
@@ -210,35 +251,98 @@ impl GpuContext {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("Render Encoder"),
             });
-        {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Render Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.0,
-                            g: 0.0,
-                            b: 0.0,
-                            a: 1.0,
-                        }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                    depth_slice: None,
-                })],
-                depth_stencil_attachment: None,
-                occlusion_query_set: None,
-                timestamp_writes: None,
-                multiview_mask: None,
+
+        for (id, image_delta) in &full_output.textures_delta.set {
+            self.egui_renderer
+                .update_texture(&self.device, &self.queue, *id, image_delta);
+        }
+        let font_tex_id = egui::TextureId::default();
+        if self.egui_renderer.texture(&font_tex_id).is_none() {
+            self.egui_ctx.fonts(|fonts| {
+                let image = fonts.image();
+                let delta = egui::epaint::ImageDelta {
+                    image: egui::epaint::ImageData::Color(std::sync::Arc::new(image)),
+                    pos: None,
+                    options: egui::epaint::textures::TextureOptions::LINEAR,
+                };
+                self.egui_renderer
+                    .update_texture(&self.device, &self.queue, font_tex_id, &delta);
             });
+        }
+        let screen_descriptor = egui_wgpu::ScreenDescriptor {
+            size_in_pixels: [self.config.width, self.config.height],
+            pixels_per_point: window.scale_factor() as f32,
+        };
+        let egui_cmd_buffers = self.egui_renderer.update_buffers(
+            &self.device,
+            &self.queue,
+            &mut encoder,
+            &clipped_primitives,
+            &screen_descriptor,
+        );
+
+        {
+            let mut render_pass = encoder
+                .begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("Particle Render Pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color {
+                                r: 0.0,
+                                g: 0.0,
+                                b: 0.0,
+                                a: 1.0,
+                            }),
+                            store: wgpu::StoreOp::Store,
+                        },
+                        depth_slice: None,
+                    })],
+                    depth_stencil_attachment: None,
+                    occlusion_query_set: None,
+                    timestamp_writes: None,
+                    multiview_mask: None,
+                })
+                .forget_lifetime();
             render_pass.set_pipeline(&self.pipelines.render);
             render_pass.set_bind_group(0, &self.pipelines.bind_group, &[]);
-
-            // Draw 6 vertices (1 square) per particle!
             render_pass.draw(0..6, 0..num_particles);
         }
+
+        {
+            let mut render_pass = encoder
+                .begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("egui Render Pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                        depth_slice: None,
+                    })],
+                    depth_stencil_attachment: None,
+                    occlusion_query_set: None,
+                    timestamp_writes: None,
+                    multiview_mask: None,
+                })
+                .forget_lifetime();
+            self.egui_renderer
+                .render(&mut render_pass, &clipped_primitives, &screen_descriptor);
+        }
+
+        for id in &full_output.textures_delta.free {
+            self.egui_renderer.free_texture(id);
+        }
+
         self.queue.submit(std::iter::once(encoder.finish()));
+        // self.queue.submit(
+        //     egui_cmd_buffers
+        //         .into_iter()
+        //         .chain(std::iter::once(encoder.finish())),
+        // );
         output.present();
         Ok(())
     }
