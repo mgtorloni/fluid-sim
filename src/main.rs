@@ -97,6 +97,13 @@ impl ApplicationHandler for App {
 
                     let num_particles = self.params.no_particles;
                     let params = &mut self.params;
+                    let profiler_snapshot: Option<Vec<(&'static str, f32)>> =
+                        gpu.profiler.as_ref().map(|p| {
+                            crate::gpu::profiler::PASSES
+                                .iter()
+                                .map(|&n| (n, p.last_ms.get(n).copied().unwrap_or(0.0)))
+                                .collect()
+                        });
                     match gpu.render(
                         window,
                         |ctx| {
@@ -106,6 +113,28 @@ impl ApplicationHandler for App {
                                 .show(ctx, |ui| {
                                     params.ui(ui);
                                 });
+                            if let Some(rows) = &profiler_snapshot {
+                                egui::Window::new("GPU Profile")
+                                    .anchor(egui::Align2::RIGHT_TOP, egui::vec2(-8.0, 8.0))
+                                    .resizable(false)
+                                    .show(ctx, |ui| {
+                                        let total: f32 = rows.iter().map(|(_, ms)| ms).sum();
+                                        egui::Grid::new("gpu_profile_grid")
+                                            .num_columns(2)
+                                            .spacing([20.0, 2.0])
+                                            .striped(true)
+                                            .show(ui, |ui| {
+                                                for (name, ms) in rows {
+                                                    ui.label(*name);
+                                                    ui.label(format!("{:>6.3} ms", ms));
+                                                    ui.end_row();
+                                                }
+                                                ui.label("total");
+                                                ui.label(format!("{:>6.3} ms", total));
+                                                ui.end_row();
+                                            });
+                                    });
+                            }
                         },
                         num_particles,
                     ) {

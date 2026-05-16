@@ -7,6 +7,7 @@ use winit::window::Window;
 
 use super::particle::GpuParticle;
 use super::pipelines::Pipelines;
+use super::profiler::{GpuProfiler, PASSES};
 
 pub struct GpuContext {
     pub device: wgpu::Device,
@@ -24,6 +25,8 @@ pub struct GpuContext {
     pub egui_ctx: egui::Context,
     pub egui_state: egui_winit::State,
     pub egui_renderer: egui_wgpu::Renderer,
+
+    pub profiler: Option<GpuProfiler>,
 }
 
 impl GpuContext {
@@ -45,10 +48,18 @@ impl GpuContext {
         println!("Using GPU: {:?}", adapter.get_info().name);
         println!("Using Backend: {:?}", adapter.get_info().backend);
 
+        let supported = adapter.features();
+        let mut features = wgpu::Features::VERTEX_WRITABLE_STORAGE;
+        if supported.contains(wgpu::Features::TIMESTAMP_QUERY) {
+            features |= wgpu::Features::TIMESTAMP_QUERY;
+        }
+        if supported.contains(wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS) {
+            features |= wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS;
+        }
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("GPU Device"),
-                required_features: wgpu::Features::VERTEX_WRITABLE_STORAGE,
+                required_features: features,
                 ..Default::default()
             })
             .await
@@ -121,6 +132,8 @@ impl GpuContext {
             surface_format,
             egui_wgpu::RendererOptions::default(),
         );
+
+        let profiler = GpuProfiler::new(&device, &queue, PASSES.to_vec());
         Self {
             surface,
             device,
@@ -135,6 +148,7 @@ impl GpuContext {
             egui_ctx,
             egui_state,
             egui_renderer,
+            profiler,
         }
     }
 
@@ -167,22 +181,34 @@ impl GpuContext {
         {
             let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("Assign Cells Pass"),
-                ..Default::default()
+                timestamp_writes: self
+                    .profiler
+                    .as_ref()
+                    .map(|p| p.compute_timestamp_writes("hash")),
             });
             compute_pass.set_pipeline(&self.pipelines.hash);
             compute_pass.set_bind_group(0, &self.pipelines.bind_group, &[]);
             compute_pass.dispatch_workgroups(workgroup_count, 1, 1);
         }
 
+        if let Some(p) = &self.profiler {
+            p.write_encoder_timestamp(&mut encoder, "sort", false);
+        }
         self.sorter
             .sort(&mut encoder, &self.queue, &self.sort_buffers, None);
+        if let Some(p) = &self.profiler {
+            p.write_encoder_timestamp(&mut encoder, "sort", true);
+        }
 
         encoder.clear_buffer(&self.lookups_buffer, 0, None);
 
         {
             let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("Calculate Lookups Pass"),
-                ..Default::default()
+                timestamp_writes: self
+                    .profiler
+                    .as_ref()
+                    .map(|p| p.compute_timestamp_writes("build_lookups")),
             });
             compute_pass.set_pipeline(&self.pipelines.lookups);
             compute_pass.set_bind_group(0, &self.pipelines.bind_group, &[]);
@@ -191,7 +217,10 @@ impl GpuContext {
         {
             let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("Density Compute Pass"),
-                ..Default::default()
+                timestamp_writes: self
+                    .profiler
+                    .as_ref()
+                    .map(|p| p.compute_timestamp_writes("density")),
             });
             compute_pass.set_pipeline(&self.pipelines.density);
             compute_pass.set_bind_group(0, &self.pipelines.bind_group, &[]);
@@ -201,7 +230,10 @@ impl GpuContext {
         {
             let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("Forces Compute Pass"),
-                ..Default::default()
+                timestamp_writes: self
+                    .profiler
+                    .as_ref()
+                    .map(|p| p.compute_timestamp_writes("forces")),
             });
             compute_pass.set_pipeline(&self.pipelines.forces);
             compute_pass.set_bind_group(0, &self.pipelines.bind_group, &[]);
@@ -211,7 +243,10 @@ impl GpuContext {
         {
             let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("Physics Compute Pass"),
-                timestamp_writes: None,
+                timestamp_writes: self
+                    .profiler
+                    .as_ref()
+                    .map(|p| p.compute_timestamp_writes("physics")),
             });
 
             compute_pass.set_pipeline(&self.pipelines.physics);
@@ -301,7 +336,10 @@ impl GpuContext {
                     })],
                     depth_stencil_attachment: None,
                     occlusion_query_set: None,
-                    timestamp_writes: None,
+                    timestamp_writes: self
+                        .profiler
+                        .as_ref()
+                        .map(|p| p.render_timestamp_writes("render_particles")),
                     multiview_mask: None,
                 })
                 .forget_lifetime();
@@ -325,7 +363,10 @@ impl GpuContext {
                     })],
                     depth_stencil_attachment: None,
                     occlusion_query_set: None,
-                    timestamp_writes: None,
+                    timestamp_writes: self
+                        .profiler
+                        .as_ref()
+                        .map(|p| p.render_timestamp_writes("render_egui")),
                     multiview_mask: None,
                 })
                 .forget_lifetime();
@@ -337,12 +378,20 @@ impl GpuContext {
             self.egui_renderer.free_texture(id);
         }
 
+        if let Some(p) = &mut self.profiler {
+            p.resolve(&mut encoder);
+        }
+
         self.queue.submit(std::iter::once(encoder.finish()));
-        // self.queue.submit(
-        //     egui_cmd_buffers
-        //         .into_iter()
-        //         .chain(std::iter::once(encoder.finish())),
-        // );
+
+        if let Some(p) = &mut self.profiler {
+            p.after_submit();
+        }
+        let _ = self.device.poll(wgpu::PollType::Poll);
+        if let Some(p) = &mut self.profiler {
+            p.poll_results();
+        }
+
         output.present();
         Ok(())
     }
