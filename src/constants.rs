@@ -41,7 +41,7 @@ impl Default for SimulationParams {
             rest_density: 0.002,
             dt: 1.0,
             gravity: [0.0, 450.0],
-            gas_constant: 70000.0,
+            gas_constant: 23000.0,
             influence_radius: 4.0,
             cell_size: 4.0,
             damping: 0.3,
