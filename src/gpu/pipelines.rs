@@ -19,6 +19,7 @@ impl Pipelines {
         constants_buffer: &wgpu::Buffer,
         sort_buffers: &wgpu_sort::SortBuffers,
         lookups_buffer: &wgpu::Buffer,
+        predicted_pos_buffer: &wgpu::Buffer,
     ) -> Pipelines {
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Compute Bind Group Layout"),
@@ -73,6 +74,16 @@ impl Pipelines {
                     },
                     count: None,
                 },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 5,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: false },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
             ],
         });
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -98,6 +109,10 @@ impl Pipelines {
                 wgpu::BindGroupEntry {
                     binding: 4,
                     resource: lookups_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: predicted_pos_buffer.as_entire_binding(),
                 },
             ],
         });

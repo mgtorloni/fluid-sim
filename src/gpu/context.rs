@@ -18,6 +18,7 @@ pub struct GpuContext {
     pub pipelines: Pipelines,
     pub constants_buffer: wgpu::Buffer,
     pub lookups_buffer: wgpu::Buffer,
+    pub predicted_pos_buffer: wgpu::Buffer,
     pub sorter: wgpu_sort::GPUSorter,
     pub sort_buffers: wgpu_sort::SortBuffers,
 
@@ -81,6 +82,13 @@ impl GpuContext {
             contents: bytemuck::cast_slice(&initial_particles),
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         });
+        let initial_predicted_pos: Vec<[f32; 2]> =
+            initial_particles.iter().map(|p| p.pos).collect();
+        let predicted_pos_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Predicted Pos Buffer"),
+            contents: bytemuck::cast_slice(&initial_predicted_pos),
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        });
         let constants_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Constants Buffer"),
             contents: bytemuck::cast_slice(&[params]),
@@ -105,6 +113,7 @@ impl GpuContext {
             &constants_buffer,
             &sort_buffers,
             &lookups_buffer,
+            &predicted_pos_buffer,
         );
 
         let egui_ctx = egui::Context::default();
@@ -130,6 +139,7 @@ impl GpuContext {
             pipelines,
             constants_buffer,
             lookups_buffer,
+            predicted_pos_buffer,
             sort_buffers,
             sorter,
             egui_ctx,

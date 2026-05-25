@@ -17,7 +17,6 @@ struct Constants {
 
 struct Particle {
     pos: vec2<f32>,
-    predicted_pos: vec2<f32>,
     vel: vec2<f32>,
     force: vec2<f32>,
     density: f32,

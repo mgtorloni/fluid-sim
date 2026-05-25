@@ -83,7 +83,7 @@ impl ApplicationHandler for App {
                 if let (Some(gpu), Some(window)) = (&mut self.gpu_context, self.window.as_ref()) {
                     let mut time_to_simulate = delta_time.min(0.1);
 
-                    let max_step_dt = 1.0 / 60.0;
+                    let max_step_dt = 1.0 / 120.0;
                     let max_substeps = 1;
                     let mut substeps = 0;
                     while time_to_simulate > 0.0 && substeps < max_substeps {
