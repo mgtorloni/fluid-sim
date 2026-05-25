@@ -13,6 +13,9 @@ struct Constants {
     influence_radius: f32,
     cell_size: f32,
     damping: f32,
+    mouse_pos: vec2<f32>,
+    mouse_strength: f32,
+    mouse_influence_radius: f32,
     _padding: vec2<f32>}
 struct Cell {
     cell_id: u32,

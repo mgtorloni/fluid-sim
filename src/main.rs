@@ -6,10 +6,12 @@ use crate::constants::SimulationParams;
 use crate::gpu::context::GpuContext;
 use winit::application::ApplicationHandler;
 use winit::error::EventLoopError;
-use winit::event::WindowEvent;
+use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::{Window, WindowId};
+
+const MOUSE_FORCE: f32 = 200.0;
 
 pub struct App {
     gpu_context: Option<GpuContext>,
@@ -18,6 +20,8 @@ pub struct App {
     last_frame_time: std::time::Instant,
     frame_rate: u32,
     params: SimulationParams,
+    attract_held: bool,
+    repel_held: bool,
 }
 
 impl Default for App {
@@ -29,6 +33,8 @@ impl Default for App {
             last_frame_time: std::time::Instant::now(),
             frame_rate: 0,
             params: SimulationParams::default(),
+            attract_held: false,
+            repel_held: false,
         }
     }
 }
@@ -60,13 +66,27 @@ impl ApplicationHandler for App {
         _window_id: WindowId,
         event: WindowEvent,
     ) {
-        if let (Some(gpu), Some(window)) = (&mut self.gpu_context, &self.window) {
-            gpu.handle_window_event(window, &event);
-        }
+        let egui_wants_pointer =
+            if let (Some(gpu), Some(window)) = (&mut self.gpu_context, &self.window) {
+                gpu.handle_window_event(window, &event);
+                gpu.egui_ctx.egui_wants_pointer_input()
+            } else {
+                false
+            };
 
         match event {
             WindowEvent::CloseRequested => {
                 event_loop.exit();
+            }
+            WindowEvent::MouseInput { state, button, .. } => {
+                if !egui_wants_pointer {
+                    let pressed = state == ElementState::Pressed;
+                    match button {
+                        MouseButton::Left => self.attract_held = pressed,
+                        MouseButton::Right => self.repel_held = pressed,
+                        _ => {}
+                    }
+                }
             }
             WindowEvent::Resized(physical_size) => {
                 if let Some(gpu) = &mut self.gpu_context {
@@ -81,6 +101,20 @@ impl ApplicationHandler for App {
                 let delta_time = (now - self.last_frame_time).as_secs_f32();
                 self.last_frame_time = now;
                 if let (Some(gpu), Some(window)) = (&mut self.gpu_context, self.window.as_ref()) {
+                    self.params.mouse_strength = 0.0;
+                    if self.attract_held || self.repel_held {
+                        if let Some(pos) = gpu.egui_ctx.pointer_latest_pos() {
+                            let scale = window.scale_factor() as f32;
+                            self.params.mouse_pos = [pos.x * scale, pos.y * scale];
+                            // attract takes precedence if both held
+                            self.params.mouse_strength = if self.attract_held {
+                                MOUSE_FORCE
+                            } else {
+                                -MOUSE_FORCE
+                            };
+                        }
+                    }
+
                     let mut time_to_simulate = delta_time.min(0.1);
 
                     let max_step_dt = 1.0 / 120.0;

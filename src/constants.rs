@@ -5,29 +5,29 @@ pub const NO_PARTICLES: u32 = 100000;
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
 pub struct SimulationParams {
-    pub width: f32,            //offset 0
-    pub height: f32,           //offset 4
-    pub no_particles: u32,     //offset 8
-    pub max_vel: f32,          //offset 12
-    pub radius: f32,           //offset 16
-    pub mass: f32,             //offset 20
-    pub rest_density: f32,     //offset 24
-    pub dt: f32,               //offset 28
-    pub gravity: [f32; 2],     //offset 32
-    pub gas_constant: f32,     //offset 40
-    pub influence_radius: f32, //offset 44
-    pub cell_size: f32,        //offset 48
-    pub damping: f32,          //offset 52
-    pub _padding: [f32; 2],    // offset 56
-                               // https://www.w3.org/TR/WGSL/#address-space-layout-constraints
-                               // because this is going to be a uniform buffer
-                               // i.e. roundUp(16, AlignOf(S))
-                               // AlignOf(S) = max(AlignOfMember(S,0), max(AlignOfMember(S,1), ... , AlignOfMember(S,N)) = 8 here
-                               // so roundUp(16,8) = 16  meaning that the struct is aligned to 16 bytes
-                               // 64 bytes in total which is divisible by 16 so we are okay
-
-                               // pub mouse_influence_radius: f32,
-                               // pub mouse_force: f32,
+    pub width: f32,                  //offset 0
+    pub height: f32,                 //offset 4
+    pub no_particles: u32,           //offset 8
+    pub max_vel: f32,                //offset 12
+    pub radius: f32,                 //offset 16
+    pub mass: f32,                   //offset 20
+    pub rest_density: f32,           //offset 24
+    pub dt: f32,                     //offset 28
+    pub gravity: [f32; 2],           //offset 32
+    pub gas_constant: f32,           //offset 40
+    pub influence_radius: f32,       //offset 44
+    pub cell_size: f32,              //offset 48
+    pub damping: f32,                //offset 52
+    pub mouse_pos: [f32; 2],         //offset 56 (vec2 align 8, 56%8==0)
+    pub mouse_strength: f32,         //offset 64 (signed: <0 repel, >0 attract, ==0 none)
+    pub mouse_influence_radius: f32, //offset 68
+    pub _padding: [f32; 2],          //offset 72
+                                     // https://www.w3.org/TR/WGSL/#address-space-layout-constraints
+                                     // because this is going to be a uniform buffer
+                                     // i.e. roundUp(16, AlignOf(S))
+                                     // AlignOf(S) = max(AlignOfMember(S,0), max(AlignOfMember(S,1), ... , AlignOfMember(S,N)) = 8 here
+                                     // so roundUp(16,8) = 16  meaning that the struct is aligned to 16 bytes
+                                     // 80 bytes in total which is divisible by 16 so we are okay
 }
 impl Default for SimulationParams {
     fn default() -> Self {
@@ -36,18 +36,19 @@ impl Default for SimulationParams {
             height: 1000.0,
             no_particles: NO_PARTICLES,
             max_vel: 500.0,
-            radius: 3.0,
+            radius: 2.0,
             mass: 1.0,
-            rest_density: 0.0067,
+            rest_density: 0.09,
             dt: 1.0,
             gravity: [0.0, 450.0],
             gas_constant: 120000.0,
             influence_radius: 4.0,
             cell_size: 4.0,
             damping: 0.3,
+            mouse_pos: [0.0, 0.0],
+            mouse_strength: 0.0,
+            mouse_influence_radius: 70.0,
             _padding: [0.0; 2],
-            // mouse_influence_radius: 70.0,
-            // mouse_force: 13670.0,
         }
     }
 }
@@ -111,16 +112,9 @@ impl SimulationParams {
                 );
                 ui.end_row();
 
-                // ui.heading("Mouse Interaction");
-                // ui.end_row();
-
-                // ui.label("Mouse Radius");
-                // ui.add(egui::DragValue::new(&mut self.mouse_influence_radius).speed(1.0));
-                // ui.end_row();
-
-                // ui.label("Mouse Force");
-                // ui.add(egui::DragValue::new(&mut self.mouse_force).speed(10.0));
-                // ui.end_row();
+                ui.label("Mouse Radius");
+                ui.add(egui::DragValue::new(&mut self.mouse_influence_radius).speed(1.0));
+                ui.end_row();
             });
     }
 }

@@ -15,6 +15,9 @@ struct Constants {
     influence_radius: f32,
     cell_size: f32,
     damping: f32,
+    mouse_pos: vec2<f32>,
+    mouse_strength: f32,
+    mouse_influence_radius: f32,
     _padding: vec2<f32>}
 
 struct Particle {
@@ -236,11 +239,33 @@ fn calculate_pressure_force(@builtin(global_invocation_id) global_id: vec3<u32>)
     particles[index].force = force;
 }
 
+fn mouse_delta_vel(particle_pos: vec2<f32>) -> vec2<f32> {
+    // mirrors IOInteraction::delta_vel in cpu/simulation.rs
+    // strength > 0 attracts toward mouse, < 0 repels away, == 0 disables
+    let strength = constants.mouse_strength;
+    if strength == 0.0 {
+        return vec2<f32>(0.0, 0.0);
+    }
+    let radius = constants.mouse_influence_radius;
+    // attract: delta points toward mouse, factor grows with dist
+    // repel:   delta points away from mouse, factor shrinks with dist
+    let attract = strength > 0.0;
+    let delta = select(particle_pos - constants.mouse_pos, constants.mouse_pos - particle_pos, attract);
+    let dist = length(delta);
+    if dist >= radius || dist <= 0.0001 {
+        return vec2<f32>(0.0, 0.0);
+    }
+    let dir = delta / dist;
+    let factor = select(1.0 - dist / radius, dist / radius, attract);
+    return dir * abs(strength) * factor;
+}
+
 fn integrate(index: u32) {
     let acceleration = particles[index].force / particles[index].density;
     let velocity_old = particles[index].vel;
 
     particles[index].vel += acceleration * constants.dt;
+    particles[index].vel += mouse_delta_vel(particles[index].pos);
     let velocity_length = length(particles[index].vel);
 
     // Limit velocity so they don't blow up when coming too close to eachother. 
