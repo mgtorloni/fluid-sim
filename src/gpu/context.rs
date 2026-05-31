@@ -172,7 +172,7 @@ impl GpuContext {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("Compute Encoder"),
             });
-        let workgroup_count = (num_particles as f32 / 64.0).ceil() as u32;
+        let workgroup_count = (num_particles as f32 / 128.0).ceil() as u32;
 
         {
             let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -226,7 +226,7 @@ impl GpuContext {
 
             compute_pass.set_pipeline(&self.pipelines.physics);
             compute_pass.set_bind_group(0, &self.pipelines.bind_group, &[]);
-            let workgroup_count = (num_particles as f32 / 64.0).ceil() as u32;
+            let workgroup_count = (num_particles as f32 / 128.0).ceil() as u32;
             compute_pass.dispatch_workgroups(workgroup_count, 1, 1);
         }
 
