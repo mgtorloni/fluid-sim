@@ -68,8 +68,8 @@ impl GpuContext {
             format: surface_format,
             width: size.width.max(1), // wgpu crashes if width/height are 0
             height: size.height.max(1),
+            // we want raw GPU throughput readings, not refresh locked so we explicitly stop vsync
             present_mode: wgpu::PresentMode::AutoNoVsync,
-            // present_mode: surface_caps.present_modes[0],
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
@@ -167,6 +167,15 @@ impl GpuContext {
     }
 
     pub fn compute(&mut self, num_particles: u32) {
+        // Frame pipeline (each pass reads the previous one's output):
+        // hash    -> assign cell id to each particle
+        // sort    -> reorder particle_ids by cell_id (radix on GPU)
+        // clear   -> wipe lookups so empty cells don't keep stale ranges
+        // lookups -> build per-cell [start, end) ranges from sorted ids
+        // density -> per-particle density + pressure from neighbors
+        // forces  -> pressure + gravity, reads density/pressure
+        // physics -> integrate velocity/position, writes new predicted_pos
+
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -187,6 +196,15 @@ impl GpuContext {
         self.sorter
             .sort(&mut encoder, &self.queue, &self.sort_buffers, None);
 
+        // Zero stale (start, end) ranges from last frame. build_lookups only
+        // writes cells that contain a particle this frame, so cells that just
+        // emptied would otherwise keep last frame's range, pointing into
+        // the re-sorted particle_ids array at unrelated particles.
+        // The SPH kernels return 0 outside influence_radius, so most of those stale
+        // fetches contribute nothing. But occasionally a stale fetch hits a particle that is currently
+        // near the query point, double-counting it. The error is invisible
+        // visually, but to the extent of keeping the simulation as accurate as possible I think it is
+        // worth keeping it.
         encoder.clear_buffer(&self.lookups_buffer, 0, None);
 
         {

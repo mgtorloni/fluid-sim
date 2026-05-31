@@ -233,11 +233,14 @@ fn integrate(index: u32) {
     let velocity_length = length(particles[index].vel);
 
     // Limit velocity so they don't blow up when coming too close to eachother. 
-    // Maybe we need a better solution for this.
+    // TODO: maybe we need a better solution for this.
     if velocity_length * velocity_length > constants.max_vel * constants.max_vel {
         particles[index].vel = (particles[index].vel / velocity_length) * constants.max_vel;
     }
 
+    // Density and force kernels read predicted_pos (= pos + vel*dt) rather
+    // than pos. Using the projected next step positions stabilizes the sim
+    // against pressure instabilities at large timesteps. This was borrowed from Muller's paper.
     particles[index].pos += (particles[index].vel + velocity_old) * 0.5 * constants.dt;
     boundaries(index);
     predicted_pos[index] = particles[index].pos + particles[index].vel * constants.dt;

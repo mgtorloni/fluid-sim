@@ -42,6 +42,11 @@ fn build_lookups(@builtin(global_invocation_id) global_id: vec3<u32>) {
     if index >= constants.no_particles { return; }
     let cell_id = cells_ids[index];
 
+    // Each particle checks its sorted neighbors: if my left neighbor is in
+    // a different cell, I'm the start of my cell's range, if my right neighbour
+    // is in a different cell, I'm one past the end. One thread per particle,
+    // no atomics, because the first and last particles of each cell are the
+    // only ones that write to their respective fields.
     if index == 0u || cells_ids[index - 1u] != cell_id {
         lookups[cell_id].start_index = index;
     } if index == constants.no_particles - 1u || cells_ids[index + 1u] != cell_id {
