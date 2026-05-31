@@ -1,6 +1,19 @@
 use wgpu::{self, PipelineCompilationOptions};
 use wgpu_sort;
 
+const COMMON_WGSL: &str = include_str!("./shaders/common.wgsl");
+const SEARCH_WGSL: &str = include_str!("./shaders/search.wgsl");
+const UPDATE_WGSL: &str = include_str!("./shaders/update.wgsl");
+const RENDER_WGSL: &str = include_str!("./shaders/render.wgsl");
+
+fn make_shader(device: &wgpu::Device, label: &str, body: &str) -> wgpu::ShaderModule {
+    let src = format!("{}\n{}", COMMON_WGSL, body);
+    device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some(label),
+        source: wgpu::ShaderSource::Wgsl(src.into()),
+    })
+}
+
 pub struct Pipelines {
     pub hash: wgpu::ComputePipeline,
     pub lookups: wgpu::ComputePipeline,
@@ -122,12 +135,9 @@ impl Pipelines {
             immediate_size: 0,
         });
 
-        let search_shader =
-            device.create_shader_module(wgpu::include_wgsl!("./shaders/search.wgsl"));
-        let update_shader =
-            device.create_shader_module(wgpu::include_wgsl!("./shaders/update.wgsl"));
-        let render_shader =
-            device.create_shader_module(wgpu::include_wgsl!("./shaders/render.wgsl"));
+        let search_shader = make_shader(device, "search", SEARCH_WGSL);
+        let update_shader = make_shader(device, "update", UPDATE_WGSL);
+        let render_shader = make_shader(device, "render", RENDER_WGSL);
 
         let hash = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("Hash Pipeline"),

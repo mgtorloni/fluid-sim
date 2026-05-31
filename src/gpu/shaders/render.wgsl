@@ -1,32 +1,4 @@
-struct Constants {
-	width:f32,
-	height:f32,
-	no_particles:u32,
-	max_vel: f32,
-    radius: f32,
-    mass: f32,
-    rest_density: f32,
-	dt: f32,
-    gravity: vec2<f32>,
-    gas_constant: f32,
-    influence_radius: f32,
-    cell_size: f32,
-    damping: f32,
-    mouse_pos: vec2<f32>,
-    mouse_strength: f32,
-    mouse_influence_radius: f32,
-	_padding: vec2<f32>
-}
-
-struct Particle {
-    pos: vec2<f32>,
-    vel: vec2<f32>,
-    force: vec2<f32>,
-    density: f32,
-    pressure: f32,
-}
-
-@group(0) @binding(0) 
+@group(0) @binding(0)
 var<storage, read_write> particles: array<Particle>;
 
 @group(0) @binding(1) 
